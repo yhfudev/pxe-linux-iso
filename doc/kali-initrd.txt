@@ -1,0 +1,70 @@
+
+How to create initrd.img patches for Kali
+
+Yunhui <yhfudev@gmail.com>
+
+The Kali version 1.0.4 can't boot from NFS environment,
+because of lacking NFS kernel modules in the initrd.img file.
+This post (ref: https://wiki.hashdump.org/index.php/PXE::Kali)
+described how to fix it.
+
+Here's the simple steps I used to create patches from Kali Live CD.
+
+1. Start Kali Live CD in one PC or VM, we refer the PC as 'LIVE';
+2. Create a working folder in your PXE server, we refer the PC as 'PXE';
+   Untar the filelive/initrd.img:
+
+FN_KALI="/media/cloudnfs/tftpboot/kali-linux-1.0.4-amd64.iso"
+#FN_KALI="/media/cloudnfs/tftpboot/kali-linux-1.0.4-i386.iso"
+DN_CDMNT="/media/kalilive/"
+
+mkdir -p "${DN_CDMNT}"
+umount "${DN_CDMNT}"
+mount -o loop,utf8 "${FN_KALI}" "${DN_CDMNT}"
+
+cd
+rm -rf temp
+mkdir temp
+cd temp
+zcat "${DN_CDMNT}/live/initrd.img" | cpio -i
+ls
+
+3. Get kernel modules from 'LIVE', and send back to your 'PXE' server;
+
+DN_SYS_KMOD="/lib/modules/$(uname -r)/"
+export DN_KMOD="$(uname -r)"
+
+cd
+mkdir -p "${DN_KMOD}/kernel/fs"
+mkdir -p "${DN_KMOD}/kernel/net"
+
+# copy the module dependencies
+cp ${DN_SYS_KMOD}/* "${DN_KMOD}"
+
+cp -r ${DN_SYS_KMOD}/kernel/fs/fscache       "${DN_KMOD}/kernel/fs"
+cp -r ${DN_SYS_KMOD}/kernel/fs/nfs           "${DN_KMOD}/kernel/fs"
+cp -r ${DN_SYS_KMOD}/kernel/fs/nfs_common    "${DN_KMOD}/kernel/fs"
+cp -r ${DN_SYS_KMOD}/kernel/fs/lockd         "${DN_KMOD}/kernel/fs"
+cp -r ${DN_SYS_KMOD}/kernel/net/dns_resolver "${DN_KMOD}/kernel/net"
+cp -r ${DN_SYS_KMOD}/kernel/net/sunrpc       "${DN_KMOD}/kernel/net"
+
+tar -cf libs-$(uname -r).tar "${DN_KMOD}"
+
+scp libs-$(uname -r).tar user@pxeserver:.
+
+4. Save the files to your folder in 'PXE':
+
+#export DN_KMOD="$(uname -r)"
+export DN_KMOD="3.7-trunk-amd64"
+#export DN_KMOD="3.7-trunk-686-pae"
+
+cd
+cd temp
+cd lib/modules
+tar -xf ~/libs-${DN_KMOD}.tar
+cd ../..
+find . | cpio --create --format='newc' > initrd.img
+gzip initrd.img
+mv initrd.img.gz ../initrd-kali-1.0.4-${DN_KMOD}.img
+
+5. You may use the new patched initrd.img now.

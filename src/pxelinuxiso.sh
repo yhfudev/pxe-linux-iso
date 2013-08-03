@@ -1,0 +1,1552 @@
+#!/bin/bash
+#This project helps the user to boot/install the Linux distributions more easy from ISO files.
+#
+# Supported Linux distributions:
+#  - CentOS/Fedora
+#  - Debian/Ubuntu
+#  - Kali/BackTrack
+#  - Mint linux
+#
+# Copyright 2013 Yunhui Fu <yhfudev@gmail.com>
+# License: GPL v3.0 or later
+
+#DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
+DN_EXEC="$(dirname "$0")"
+if [ ! "${DN_EXEC}" = "" ]; then
+    DN_EXEC="${DN_EXEC}/"
+else
+    DN_EXEC="./"
+fi
+
+. ${DN_EXEC}/libbash.sh
+
+############################################################
+# detect the linux distribution
+FN_AWK_DET_ISO="/tmp/detlinuxiso.awk"
+FN_AWK_DET_URL="/tmp/detlinuxurl.awk"
+
+gen_detect_iso_script () {
+cat << EOF > "${FN_AWK_DET_ISO}"
+#!/usr/bin/awk
+# try to guess the linux distribution from ISO file name
+# Copyright 2013 Yunhui Fu
+# License: GPL v3.0 or later
+
+BEGIN {
+    FN_OUTPUT=FNOUT
+    if ("" == FN_OUTPUT) {
+        FN_OUTPUT="guess-linux-dist-output-iso"
+        print "[DBG] Waring: use the default output file name: " FN_OUTPUT;
+        print "[DBG]         please specify the output file name via 'awk -v FNOUT=outfile'";
+    }
+    flg_live=0;
+    flg_nfs=0;
+    dist_release="";
+    dist_name="";
+    dist_arch="";
+    dist_type="net";
+}
+{
+    split (\$0, a, "-");
+    split (a[length(a)], b, ".");
+    #print "[DBG] len(b)=" length(b);
+    #print "[DBG] last(a)=" a[length(a)];
+    #print "[DBG] last(b)=" b[length(b)];
+    if (length(b) > 1) {
+        #print "[DBG] last?, len(b)=" length(b);
+        c = "";
+        for (i = 1; i < length(b); i ++) {
+            c = c b[i];
+        }
+        #print "[DBG] c=" c;
+        a[length(a)]=c;
+    }
+    for (i = 1; i <= length(a); i ++) {
+        switch (a[i]) {
+        case "BT5":
+            dist_name = "backtrack";
+            dist_release = 5;
+            dist_type="net";
+            break;
+        case "BT5R1":
+            dist_name = "backtrack";
+            dist_release = "5r1";
+            dist_type="net";
+            break;
+        case "BT5R2":
+            dist_name = "backtrack";
+            dist_release = "5r2";
+            dist_type="net";
+            break;
+        case "BT5R3":
+            dist_name = "backtrack";
+            dist_release = "5r3";
+            dist_type="net";
+            break;
+        case "bt4":
+            dist_name = "backtrack";
+            dist_release = "4";
+            dist_type="net";
+            dist_arch = "i386";
+            break;
+
+        default:
+            lstr = tolower (a[i]);
+            #print "[DBG] lstr=" lstr;
+            switch (lstr) {
+            case "debian":
+                dist_name = "debian";
+                break;
+            case "ubuntu":
+                dist_name = "ubuntu";
+                break;
+            case "centos":
+                dist_name = "centos";
+                break;
+            case "fedora":
+                dist_name = "fedora";
+                break;
+            case "archlinux":
+                dist_name = "arch";
+                break;
+            case "linuxmint":
+                dist_name = "mint";
+                break;
+            case "kali":
+                dist_name = "kali";
+                dist_type="net";
+                break;
+            case "x86_64":
+                dist_arch = "x86_64";
+                break;
+            case "64bit":
+            case "amd64":
+                dist_arch = "amd64";
+                break;
+            case "32bit":
+            case "i386":
+                dist_arch = "i386";
+                break;
+            case "i686":
+                dist_arch = "i686";
+                break;
+            case "live":
+                flg_live = 1;
+                break;
+            case "desktop":
+                dist_type="desktop";
+                flg_nfs=1;
+                break;
+            case "server":
+            case "alternate":
+                dist_type="server";
+                flg_nfs=1;
+                break;
+            # CentOS: netinstall
+            case "netinstall":
+                dist_type="net";
+                break;
+            case "netinst":
+                dist_type="net";
+                break;
+            # CentOS: minimal
+            case "minimal":
+                dist_type="server";
+                flg_nfs=1;
+                break;
+            # Ubuntu: mini
+            case "mini":
+                dist_type="net";
+                flg_nfs=1;
+                break;
+            # Arch: dual
+            case "dual":
+                dist_type="net";
+                dist_arch = "dual";
+                flg_nfs=1;
+                break;
+
+            case "testing":
+            case "stable":
+                break;
+            # kali: linux
+            case "linux":
+            # BT: final
+            case "final":
+            # BT: KDE
+            case "kde":
+            case "gnome":
+                # ignore
+                print "[DBG] ignore key=" a[i];
+                break;
+
+            default:
+                flg_ignore=1
+                if (match(lstr, /amd64/)) {
+                    dist_arch = "amd64";
+                    flg_ignore=0
+                    #print "[DBG] set arch=" dist_arch;
+                } else if (match(lstr, /64bit/)) {
+                    dist_arch = "amd64";
+                    flg_ignore=0
+                } else if (match(lstr, /i386/)) {
+                    dist_arch = "i386";
+                    flg_ignore=0
+                } else if (match(lstr, /32bit/)) {
+                    dist_arch = "i386";
+                    flg_ignore=0
+                    #print "[DBG] set arch=" dist_arch;
+                }
+                if ("debian" == dist_name) {
+                    if (match(lstr, /squeeze/)) {
+                        dist_release = "6.0.7";
+                        flg_ignore=0
+                    } else if (match(lstr, /wheezy/)) {
+                        dist_release = "7.1";
+                        flg_ignore=0
+                    } else if (match(lstr, /jessie/)) {
+                        dist_release = "testing";
+                        flg_ignore=0
+                    } else if (match(lstr, /sid/)) {
+                        dist_release = "unstable";
+                        flg_ignore=0
+                    } else {
+                        # if all is digit or .
+                        if (match(lstr, /^[0-9\.]+$/)) {
+                            dist_release = lstr;
+                            flg_ignore=0
+                            #print "[DBG] set release=" dist_release;
+                        }
+                    }
+                } else if ("ubuntu" == dist_name) {
+                    if (match(lstr, /lucid/)) {
+                        dist_release = "10.04";
+                        flg_ignore=0
+                    } else if (match(lstr, /precise/)) {
+                        dist_release = "12.04";
+                        flg_ignore=0
+                    } else if (match(lstr, /quantal/)) {
+                        dist_release = "12.10";
+                        flg_ignore=0
+                    } else if (match(lstr, /raring/)) {
+                        dist_release = "13.04";
+                        flg_ignore=0
+                    } else if (match(lstr, /saucy/)) {
+                        dist_release = "14.04";
+                        flg_ignore=0
+                    } else {
+                        # if all is digit or .
+                        if (match(lstr, /^[0-9\.]+$/)) {
+                            dist_release = lstr;
+                            flg_ignore=0
+                            #print "[DBG] set release=" dist_release;
+                        }
+                    }
+                } else {
+                    if ("" == dist_release) {
+                        #print "[DBG] fill release=" lstr;
+                        dist_release=lstr;
+                        flg_ignore=0
+                    } else if ("" == dist_arch) {
+                        #print "[DBG] fill arch=" lstr;
+                        if ("64" == lstr) {
+                            dist_arch = "amd64";
+                            flg_ignore=0
+                        } else {
+                            dist_arch = "i386";
+                            flg_ignore=0
+                        }
+                    }
+                    #print "[DBG] set arch=" dist_arch;
+                }
+                if (flg_ignore) {
+                    print "[DBG] ignore key=" a[i];
+                }
+                break;
+            }
+            break;
+        }
+    }
+}
+
+END {
+    print "[DBG]" \
+        " name=" (""==dist_name?"unknown":dist_name) \
+        " release=" (""==dist_release?"unknown":dist_release) \
+        " arch=" (""==dist_arch?"unknown":dist_arch) \
+        " type=" (""==dist_type?"unknown":dist_type) \
+        (flg_live==0?"":"(Live)") \
+        (flg_nfs==0?"":"(NFS)") \
+        ;
+    print "DECLNXOUT_NAME="      dist_name       >  FN_OUTPUT
+    print "DECLNXOUT_RELEASE="   dist_release    >> FN_OUTPUT
+    print "DECLNXOUT_ARCH="      dist_arch       >> FN_OUTPUT
+    print "DECLNXOUT_TYPE="      dist_type       >> FN_OUTPUT
+    print "DECLNXOUT_FLG_LIVE="  flg_live        >> FN_OUTPUT
+    print "DECLNXOUT_FLG_NFS="   flg_nfs         >> FN_OUTPUT
+}
+EOF
+}
+
+gen_detect_url_script () {
+cat << EOF > "${FN_AWK_DET_URL}"
+#!/usr/bin/awk
+# try to guess the linux distribution from download URL
+# Copyright 2013 Yunhui Fu
+# License: GPL v3.0 or later
+
+BEGIN {
+    FN_OUTPUT=FNOUT
+    if ("" == FN_OUTPUT) {
+        FN_OUTPUT="guess-linux-dist-output-url"
+        print "[DBG] Waring: use the default output file name: " FN_OUTPUT;
+        print "[DBG]         please specify the output file name via 'awk -v FNOUT=outfile'";
+    }
+    flg_live=0;
+    flg_nfs=0;
+    dist_release="";
+    dist_name="";
+    dist_arch="";
+    dist_type="net";
+}
+{
+    split (\$0, a, "/");
+    split (a[length(a)], b, ".");
+    #print "[DBG] len(b)=" length(b);
+    #print "[DBG] last(a)=" a[length(a)];
+    #print "[DBG] last(b)=" b[length(b)];
+    if (length(b) > 1) {
+        #print "[DBG] last?, len(b)=" length(b);
+        c = "";
+        for (i = 1; i < length(b); i ++) {
+            c = c b[i];
+        }
+        #print "[DBG] c=" c;
+        a[length(a)]=c;
+    }
+    i = 1;
+    if (match(a[1], /[~:]*:/)) {
+        i = 4;
+        #print "[DBG] skip to " i;
+    }
+    for (; i <= length(a); i ++) {
+        switch (a[i]) {
+        case "":
+            # ignore
+            break;
+        case "BT5":
+            dist_name = "backtrack";
+            dist_release = 5;
+            dist_type="net";
+            break;
+        case "BT5R1":
+            dist_name = "backtrack";
+            dist_release = "5r1";
+            dist_type="net";
+            break;
+        case "BT5R2":
+            dist_name = "backtrack";
+            dist_release = "5r2";
+            dist_type="net";
+            break;
+        case "BT5R3":
+            dist_name = "backtrack";
+            dist_release = "5r3";
+            dist_type="net";
+            break;
+        case "bt4":
+            dist_name = "backtrack";
+            dist_release = "4";
+            dist_type="net";
+            dist_arch = "i386";
+            break;
+
+        default:
+            lstr = tolower (a[i]);
+            #print "[DBG] lstr=" lstr;
+            switch (lstr) {
+            case "debian":
+                dist_name = "debian";
+                break;
+            case "ubuntu":
+                dist_name = "ubuntu";
+                break;
+            case "centos":
+                dist_name = "centos";
+                break;
+            case "fedora":
+                dist_name = "fedora";
+                break;
+            case "archlinux":
+                dist_name = "arch";
+                break;
+            case "linuxmint":
+                dist_name = "mint";
+                break;
+            case "kali":
+                dist_name = "kali";
+                dist_type="net";
+                break;
+            case "x86_64":
+                dist_arch = "x86_64";
+                break;
+            case "64bit":
+            case "amd64":
+                dist_arch = "amd64";
+                break;
+            case "32bit":
+            case "i386":
+                dist_arch = "i386";
+                break;
+            case "i686":
+                dist_arch = "i686";
+                break;
+            case "live":
+                flg_live = 1;
+                break;
+            case "desktop":
+                dist_type="desktop";
+                flg_nfs=1;
+                break;
+            case "server":
+            case "alternate":
+                dist_type="server";
+                flg_nfs=1;
+                break;
+            case "netboot":
+                dist_type="net";
+                break;
+            # CentOS: netinstall
+            case "netinstall":
+                dist_type="net";
+                break;
+            case "netinst":
+                dist_type="net";
+                break;
+            # CentOS: minimal
+            case "minimal":
+                dist_type="server";
+                flg_nfs=1;
+                break;
+            # Ubuntu: mini
+            case "mini":
+                dist_type="net";
+                flg_nfs=1;
+                break;
+            # Arch: dual
+            case "dual":
+                dist_type="net";
+                dist_arch = "dual";
+                flg_nfs=1;
+                break;
+
+            case "testing":
+            case "stable":
+                break;
+            # kali: linux
+            case "linux":
+            # BT: final
+            case "final":
+            # BT: KDE
+            case "kde":
+            case "gnome":
+            case "http:":
+                # ignore
+                break;
+
+            default:
+                flg_ignore=1
+                if (match(lstr, /amd64/)) {
+                    dist_arch = "amd64";
+                    flg_ignore=0
+                    #print "[DBG] set arch=" dist_arch;
+                } else if (match(lstr, /64bit/)) {
+                    dist_arch = "amd64";
+                    flg_ignore=0
+                } else if (match(lstr, /i386/)) {
+                    dist_arch = "i386";
+                    flg_ignore=0
+                } else if (match(lstr, /32bit/)) {
+                    dist_arch = "i386";
+                    flg_ignore=0
+                    #print "[DBG] set arch=" dist_arch;
+                }
+                if ("debian" == dist_name) {
+                    if (match(lstr, /squeeze/)) {
+                        dist_release = "6.0.7";
+                        flg_ignore=0
+                    } else if (match(lstr, /wheezy/)) {
+                        dist_release = "7.1";
+                        flg_ignore=0
+                    } else if (match(lstr, /jessie/)) {
+                        dist_release = "testing";
+                        flg_ignore=0
+                    } else if (match(lstr, /sid/)) {
+                        dist_release = "unstable";
+                        flg_ignore=0
+                    } else {
+                        # if all is digit or .
+                        if (match(lstr, /^[0-9\.]+$/)) {
+                            dist_release = lstr;
+                            flg_ignore=0
+                            #print "[DBG] set release=" dist_release;
+                        }
+                    }
+                } else if ("ubuntu" == dist_name) {
+                    if (match(lstr, /lucid/)) {
+                        dist_release = "10.04";
+                        flg_ignore=0
+                    } else if (match(lstr, /precise/)) {
+                        dist_release = "12.04";
+                        flg_ignore=0
+                    } else if (match(lstr, /quantal/)) {
+                        dist_release = "12.10";
+                        flg_ignore=0
+                    } else if (match(lstr, /raring/)) {
+                        dist_release = "13.04";
+                        flg_ignore=0
+                    } else if (match(lstr, /saucy/)) {
+                        dist_release = "14.04";
+                        flg_ignore=0
+                    } else {
+                        # if all is digit or .
+                        if (match(lstr, /^[0-9\.]+$/)) {
+                            dist_release = lstr;
+                            flg_ignore=0
+                            #print "[DBG] set release=" dist_release;
+                        }
+                    }
+                } else {
+                    if ("" == dist_release) {
+                        #print "[DBG] fill release=" lstr;
+                        dist_release=lstr;
+                        flg_ignore=0
+                    } else if ("" == dist_arch) {
+                        #print "[DBG] fill arch=" lstr;
+                        if ("64" == lstr) {
+                            dist_arch = "amd64";
+                            flg_ignore=0
+                        } else {
+                            dist_arch = "i386";
+                            flg_ignore=0
+                        }
+                    }
+                    #print "[DBG] set arch=" dist_arch;
+                }
+                if (flg_ignore) {
+                    print "[DBG] ignore key=" a[i];
+                }
+                break;
+            }
+            break;
+        }
+    }
+}
+
+END {
+    #print "[DBG]" \
+        #" name=" (""==dist_name?"unknown":dist_name) \
+        #" release=" (""==dist_release?"unknown":dist_release) \
+        #" arch=" (""==dist_arch?"unknown":dist_arch) \
+        #" type=" (""==dist_type?"unknown":dist_type) \
+        #(flg_live==0?"":"(Live)") \
+        #(flg_nfs==0?"":"(NFS)") \
+        #;
+    print "DECLNXOUT_NAME="      dist_name       >  FN_OUTPUT
+    print "DECLNXOUT_RELEASE="   dist_release    >> FN_OUTPUT
+    print "DECLNXOUT_ARCH="      dist_arch       >> FN_OUTPUT
+    print "DECLNXOUT_TYPE="      dist_type       >> FN_OUTPUT
+    print "DECLNXOUT_FLG_LIVE="  flg_live        >> FN_OUTPUT
+    print "DECLNXOUT_FLG_NFS="   flg_nfs         >> FN_OUTPUT
+}
+EOF
+}
+
+DECLNXOUT_NAME=""
+DECLNXOUT_RELEASE=""
+DECLNXOUT_ARCH=""
+DECLNXOUT_TYPE=""
+DECLNXOUT_FLG_LIVE=0
+DECLNXOUT_FLG_NFS=0
+
+_detect_export_values () {
+    PARAM_FNOUT="$1"
+    shift
+
+    DECLNXOUT_NAME=""
+    DECLNXOUT_RELEASE=""
+    DECLNXOUT_ARCH=""
+    DECLNXOUT_TYPE=""
+    DECLNXOUT_FLG_LIVE=0
+    DECLNXOUT_FLG_NFS=0
+    if [ -f "${PARAM_FNOUT}" ]; then
+        . "${PARAM_FNOUT}"
+    fi
+}
+
+detect_linux_dist () {
+    PARAM_URL2="$1"
+    shift
+
+    FN_SINGLE=$(basename "${PARAM_URL2}")
+    #URL2BASE=$(dirname "${PARAM_URL2}")
+
+    gen_detect_iso_script
+    echo "${FN_SINGLE}" | awk -v FNOUT=/tmp/tftp-out-iso -f "${FN_AWK_DET_ISO}"
+    _detect_export_values "/tmp/tftp-out-iso"
+    if [ "${DECLNXOUT_NAME}" = "" ]; then
+        gen_detect_url_script
+        echo "${PARAM_URL2}" | awk -v FNOUT=/tmp/tftp-out-url -f "${FN_AWK_DET_URL}"
+        _detect_export_values "/tmp/tftp-out-url"
+    fi
+}
+############################################################
+
+FN_MD5TMP=md5sumalltmp
+FN_SHA1TMP=sha1sumalltmp
+
+check_xxxsum () {
+    # sumname is MD5SUM or SHA1SUM
+    PARAM_SUMNAME=$1
+    shift
+    # progname is md5sum or sha1sum
+    PARAM_PROGNAME=$1
+    shift
+    # internal MD5SUM/SHA1SUM record for the file
+    PARAM_STATIC_SUM=$1
+    shift
+    # the file name
+    PARAM_RENAME1=$1
+    shift
+
+    FLG_DW=1
+    if [ -f "${PARAM_RENAME1}" ]; then
+        echo "[DBG] 1 set flg_dw back to 0" >> "/dev/stderr"
+        FLG_DW=0
+    fi
+    MD5SUM_DW=${PARAM_STATIC_SUM}
+    MD5SUM_LOCAL=
+    FN=$(dirname "${PARAM_RENAME1}")/${PARAM_SUMNAME}
+    if [ -f "${FN}" ]; then
+        MD5SUM_LOCAL=$(grep -i "${FN_SINGLE}" "${FN}" | awk '{print $1}')
+        if [ ! "${MD5SUM_LOCAL}" = "" ]; then
+            if [ ! "${MD5SUM_LOCAL}" = "${MD5SUM_DW}" ]; then
+                echo "[DBG] MD5SUM_LOCAL($MD5SUM_LOCAL) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)" >> "/dev/stderr"
+                MD5SUM_DW=${PARAM_STATIC_SUM}
+                FLG_DW=1
+            fi
+            echo "[DBG] 2 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+        fi
+    else
+        # no local MD5SUM, down load file
+        FLG_DW=1
+        touch "${FN}"
+    fi
+    MD5SUM_REMOTE=
+    rm -f "/tmp/md5tmp"
+    wget $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "/tmp/md5tmp"
+    if [ ! "$?" = "0" ]; then
+        rm -f "/tmp/md5tmp"
+        FN_BASE1=`echo "${FN_SINGLE}" | ${EXEC_AWK} -F. '{b=$1; for (i=2; i < NF; i ++) {b=b "." $(i)}; print b}'`
+        wget $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "/tmp/md5tmp"
+        if [ ! "$?" = "0" ]; then
+            rm -f "/tmp/md5tmp"
+        fi
+    fi
+    if [ -f "/tmp/md5tmp" ]; then
+        echo "[DBG] chk file /tmp/md5tmp" >> "/dev/stderr"
+        echo "[DBG] grep -i ${FN_SINGLE} /tmp/md5tmp | awk '{print $1}'" >> "/dev/stderr"
+        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "/tmp/md5tmp" | awk '{print $1}')
+        echo "[DBG] MD5SUM_REMOTE=$MD5SUM_REMOTE" >> "/dev/stderr"
+        echo "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM" >> "/dev/stderr"
+        if [ ! "${MD5SUM_REMOTE}" = "" ]; then
+            if [ ! "${MD5SUM_REMOTE}" = "${MD5SUM_DW}" ]; then
+                echo "[DBG] MD5SUM_REMOTE($MD5SUM_REMOTE) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)" >> "/dev/stderr"
+                MD5SUM_DW=${MD5SUM_REMOTE}
+                FLG_DW=1
+                echo "[DBG] 3 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+            fi
+        fi
+    fi
+    FLG_TMP1=0
+    if [ -f "${PARAM_RENAME1}" ]; then
+        FLG_TMP1=1
+    fi
+    if [ -L "${PARAM_RENAME1}" ]; then
+        FLG_TMP1=1
+    fi
+    if [ "${FLG_TMP1}" = "1" ]; then
+        if [ "${FLG_DW}" = "1" ]; then
+            echo "[DBG] chk sum: ${PARAM_PROGNAME} ${MD5SUM_DW}  ${PARAM_RENAME1}" >> "/dev/stderr"
+            echo "${MD5SUM_DW}  ${PARAM_RENAME1}" > md5sumtmp2
+            #echo "[DBG] md5sum check:"  >> "/dev/stderr"; cat md5sumtmp2 ; echo ""; echo "[DBG] md5sum --------------" >> "/dev/stderr"
+            ${PARAM_PROGNAME} -c md5sumtmp2
+            RET=$?
+            rm -f md5sumtmp2
+            #echo "[DBG] md5sum check ret = $RET" >> "/dev/stderr"
+            if [ ${RET} = 0 ]; then
+                FLG_DW=0
+                # update local MD5SUMS
+                echo "[DBG] FN=${FN}" >> "/dev/stderr"
+                grep -v "$( basename "${PARAM_RENAME1}" )" "${FN}" > "${FN}-new"
+                mv "${FN}-new" "${FN}"
+                echo "${MD5SUM_DW}  ${PARAM_RENAME1}" >> "${FN}"
+            else
+                FLG_DW=1
+            fi
+            echo "[DBG] 4 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+        fi
+    else
+        FLG_DW=1
+        echo "[DBG] filename=${PARAM_RENAME1}" >> "/dev/stderr"
+        echo "[DBG] 5 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+    fi
+    echo "[DBG] check sum done: flg_down=${FLG_DW}" >> "/dev/stderr"
+    echo "${FLG_DW}"
+}
+
+down_url () {
+    PARAM_URL0="$1"
+    shift
+    PARAM_RENAME=
+    if [ $# -gt 0 ]; then
+        PARAM_RENAME="$1"
+        shift
+    fi
+
+    echo "[DBG] PARAM_RENAME-0=$PARAM_RENAME" >> "/dev/stderr"
+
+    if [ "${PARAM_RENAME}" = "" ]; then
+        FNDOWN0=$(echo "${PARAM_URL0}" | awk -F? '{print $1}')
+
+        DN_SRCS=downloads
+        PARAM_RENAME=${DN_SRCS}/$(basename "${FNDOWN0}")
+
+        echo "[DBG] PARAM_RENAME-1=$PARAM_RENAME" >> "/dev/stderr"
+    fi
+    FN_SINGLE=$(basename "${PARAM_RENAME}")
+    DN_SRCS=$(dirname "${PARAM_RENAME}")
+    echo "[DBG] FN_SINGLE=$FN_SINGLE" >> "/dev/stderr"
+    echo "[DBG] DN_SRCS=$DN_SRCS" >> "/dev/stderr"
+
+    MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
+    FLG_DOWN=$(  check_xxxsum MD5SUMS md5sum ${MD5SUM_STATIC} "${PARAM_RENAME}" )
+    if [ "${FLG_DOWN}" = "1" ]; then
+        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | awk '{print $1}')
+        FLG_DOWN=$(  check_xxxsum SHA1SUMS sha1sum ${MD5SUM_STATIC} "${PARAM_RENAME}"  )
+    fi
+
+    if [ "${FLG_DOWN}" = "1" ]; then
+        echo "[DBG] start download file: ${PARAM_URL0}" >> "/dev/stderr"
+        if [ "${FLG_NOINTERACTIVE}" = "0" ]; then
+            read -rsn 1 -p "Press any key to continue..."
+        fi
+        #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
+
+        echo "[DBG] " download_file "${DN_SRCS}" "${MD5SUM_DW}" "${FN_SINGLE}" "${PARAM_URL0}" >> "/dev/stderr"
+        rm -f "${DN_SRCS}/${FN_SINGLE}"
+        wget -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
+        RET=$?
+        if [ ${RET} = 0 ]; then
+            md5sum  "${DN_SRCS}/${FN_SINGLE}" >> "${DN_SRCS}/MD5SUMS"
+            sha1sum "${DN_SRCS}/${FN_SINGLE}" >> "${DN_SRCS}/SHA1SUMS"
+        else
+            echo "[ERR] download file ${PARAM_URL0} error!" >> "/dev/stderr"
+            echo "[DBG] exit 0" >> "/dev/stderr"
+            exit 0
+        fi
+    fi
+}
+
+export TFTP_ROOT=/var/lib/tftpboot
+export DIST_NFSIP=192.168.0.1
+
+tftp_init_directories () {
+    # Ubuntu: /usr/lib/syslinux/
+    # CentOS: /usr/share/syslinux/
+    export HTTPD_ROOT=/var/www
+    export SYSLINUX_ROOT=/usr/lib/syslinux
+    case "$OSTYPE" in
+    RedHat)
+        export SYSLINUX_ROOT=/usr/share/syslinux
+        export HTTPD_ROOT=/var/www/html
+        ;;
+    esac
+
+    mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
+
+    mkdir -p "${TFTP_ROOT}/images-server/"
+    mkdir -p "${TFTP_ROOT}/images-desktop/"
+    mkdir -p "${TFTP_ROOT}/images-net/"
+
+    mkdir -p "${HTTPD_ROOT}"
+
+    # setup downloads folder, all of the ISO files will be stored here
+    mkdir -p "${TFTP_ROOT}/downloads/"
+}
+
+tftp_init_service () {
+    tftp_init_directories
+    mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
+
+    alias cp=cp
+    cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
+    cp "${SYSLINUX_ROOT}/menu.c32"   "${TFTP_ROOT}/netboot/"
+    cp "${SYSLINUX_ROOT}/memdisk"    "${TFTP_ROOT}/netboot/"
+    cp "${SYSLINUX_ROOT}/mboot.c32"  "${TFTP_ROOT}/netboot/"
+    cp "${SYSLINUX_ROOT}/chain.c32"  "${TFTP_ROOT}/netboot/"
+
+    # 然后构建文件链接：(注意链接要使用相对链接文件所在目录的路径!)
+    mkdir -p "${TFTP_ROOT}/images-server/"
+    mkdir -p "${TFTP_ROOT}/images-desktop/"
+    mkdir -p "${TFTP_ROOT}/images-net/"
+    cd "${TFTP_ROOT}/netboot"
+    ln -s ../images-server/
+    ln -s ../images-desktop/
+    ln -s ../images-net/
+    ln -s ../downloads/
+    cd -
+
+    mkdir -p "${HTTPD_ROOT}"
+    cd "${HTTPD_ROOT}"
+    ln -s "${TFTP_ROOT}/images-server/"
+    ln -s "${TFTP_ROOT}/images-desktop/"
+    ln -s "${TFTP_ROOT}/images-net/"
+    cd -
+
+    # set the header of configuration file
+    cat > ${TFTP_ROOT}/netboot/pxelinux.cfg/default << EOF
+#PROMPT 1
+#TIMEOUT 0
+#DISPLAY pxelinux.cfg/boot.txt
+#DEFAULT local
+
+DEFAULT menu
+PROMPT 0
+MENU TITLE pxeBoot | yhfudev@gmail.com
+TIMEOUT 200
+TOTALTIMEOUT 600
+ONTIMEOUT local
+
+LABEL local
+        MENU LABEL (local)
+        MENU DEFAULT
+        LOCALBOOT 0
+
+EOF
+
+    cat > ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt << EOF
+Available Boot Options:
+=======================
+EOF
+}
+
+#####################################################################
+# start of script
+# read the arguments of commandline
+#
+
+usage () {
+    PARAM_NAME="$1"
+
+    echo "${PARAM_NAME} v0.1" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Prepare the TFTP root directory for Linux distributions' ISO files" >> "/dev/stderr"
+    echo "So you can boot the installation CD/DVD from network(PXE)" >> "/dev/stderr"
+    echo "Written by yhfudev(yhfudev@gmail.com), 2013-07" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "${PARAM_NAME} [options] <url>" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Options:" >> "/dev/stderr"
+    echo "  --help            Print this message" >> "/dev/stderr"
+    echo "  --init            Init TFTP directory environment" >> "/dev/stderr"
+    echo "  --tftproot <DIR>  set the tftp root folder, default: ${TFTP_ROOT}" >> "/dev/stderr"
+    echo "  --nfsip <IP>      set NFS server IP, default: ${DIST_NFSIP}" >> "/dev/stderr"
+    echo "  --title <NAME>    set the boot title" >> "/dev/stderr"
+
+    echo "  --distname <NAME> set the OS type of ISO, such as centos, ubuntu, arch" >> "/dev/stderr"
+    echo "  --distarch <NAME> set the arch of the OS, such as amd64, x86_64, i386, i686" >> "/dev/stderr"
+    echo "  --distrelease <NAME> set the distribution release, such as quantal,raring" >> "/dev/stderr"
+    echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." >> "/dev/stderr"
+
+    echo "  --nointeractive|-n  no interative" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Features" >> "/dev/stderr"
+    echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" >> "/dev/stderr"
+    echo "  2. Can be run in CentOS/Ubuntu" >> "/dev/stderr"
+    echo "  2. Support CD/DVDs of Fedora/CentOS/Debian/Ubuntu/Mint/Kali/..." >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Prerequisites" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  1. Installed NFS server. This script will append lines to file /etc/exports;" >> "/dev/stderr"
+    echo "  2. Installed TFTP server. This script will append lines to file" >> "/dev/stderr"
+    echo "     /var/lib/tftpboot/netboot/pxelinux.cfg/default;" >> "/dev/stderr"
+    echo "  3. To mount ISO files as loop device, a line will also be appended to /etc/fstab;" >> "/dev/stderr"
+    echo "  4. Installed syslinux;" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Installation" >> "/dev/stderr"
+    echo "  Download the source files from GIT repo" >> "/dev/stderr"
+    echo "    git clone https://code.google.com/p/pxe-linux-iso/" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Initialize directories" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  This script use following tree structure to manage the ISO files:" >> "/dev/stderr"
+    echo "    /var/lib/tftpboot/" >> "/dev/stderr"
+    echo "      |-- downloads          # the downloaded CD/DVD ISO files and patches" >> "/dev/stderr"
+    echo "      |-- images-desktop     # mount points for Linux desktop distributions" >> "/dev/stderr"
+    echo "      |-- images-server      # mount points for Linux server distributions" >> "/dev/stderr"
+    echo "      |-- images-net         # mount points for netinstall" >> "/dev/stderr"
+    echo "      |-- netboot            # (tftp default directory)" >> "/dev/stderr"
+    echo "          |-- downloads      # symbol link" >> "/dev/stderr"
+    echo "          |-- images-desktop # symbol link" >> "/dev/stderr"
+    echo "          |-- images-server  # symbol link" >> "/dev/stderr"
+    echo "          |-- images-net     # symbol link" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  The following files also be initialized with default headers:" >> "/dev/stderr"
+    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/default" >> "/dev/stderr"
+    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Examples" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  0. Help!" >> "/dev/stderr"
+    echo "    ${PARAM_NAME} --help" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  1. Initialize directories" >> "/dev/stderr"
+    echo "    sudo ${PARAM_NAME} --init" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  2. Add entries to the PXE server" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "    2.1 Add Ubuntu mini" >> "/dev/stderr"
+    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "    2.2 Add Kali" >> "/dev/stderr"
+    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+}
+
+# the iso file list saved from arguments
+FN_TMP_LIST="/tmp/tftp-iso-file-list"
+rm -f "${FN_TMP_LIST}"
+
+# init tftp directory?
+FLG_INIT_TFTPROOT=0
+FLG_NOINTERACTIVE=0
+FN_FULL=""
+TITLE_BOOT=""
+A_DIST_NAME=""
+A_DIST_RELEASE=""
+A_DIST_ARCH=""
+A_DIST_TYPE=""
+while [ ! "$1" = "" ]; do
+    case "$1" in
+    --help|-h)
+        usage "$0"
+        exit 0
+        ;;
+    --init)
+        FLG_INIT_TFTPROOT=1
+        ;;
+    --tftproot)
+        shift
+        export TFTP_ROOT="$1"
+        ;;
+    --nfsip)
+        shift
+        export DIST_NFSIP="$1"
+        ;;
+    --title)
+        shift
+        TITLE_BOOT="$1"
+        ;;
+    --distname)
+        shift
+        A_DIST_NAME="$1"
+        ;;
+    --distarch)
+        shift
+        A_DIST_ARCH="$1"
+        ;;
+    --distrelease)
+        shift
+        A_DIST_RELEASE="$1"
+        ;;
+    --disttype)
+        shift
+        A_DIST_TYPE="$1"
+        ;;
+    --nointeractive|-n)
+        FLG_NOINTERACTIVE=1
+        ;;
+    -*)
+        echo "Use option --help to get the usages." >> "/dev/stderr"
+        exit 1
+        ;;
+    *)
+        echo "$1" >> "${FN_TMP_LIST}"
+        FN_FULL="${FN_FULL} $1"
+        break;
+        ;;
+    esac
+    shift
+done
+
+echo "[DBG] FN_FULL=$FN_FULL" >> "/dev/stderr"
+
+if [ "${FN_FULL}" = "" ]; then
+    usage "$0"
+    exit 1
+fi
+
+install_package wget coreutils nfs-common nfs-kernel-server portmap
+
+tftp_init_directories
+if [ "${FLG_INIT_TFTPROOT}" = "1" ]; then
+    tftp_init_service
+fi
+
+# 从 Ubuntu mini iso 下载链接中生成存储文件名
+ubuntu_mini_iso_genname () {
+    //TODO
+}
+
+cat << EOF > ${FN_MD5TMP}
+0c5fab6fff4c431a8827754f0b3bc13f  archlinux-2013.07.01-dual.iso
+af139d2a085978618dc53cabc67b9269  bt4-final.iso
+d324687fb891e695089745d461268576  BT5R3-KDE-32.iso
+981b897b7fdf34fb1431ba84fe93249f  BT5R3-KDE-64.iso
+afb8c6192a2e1d1ba0fa3db9c531be6d  pentoo-i686-2013.0_RC1.8.iso
+9ed0286a23eeae77be6fd9b952c5f62c  initrd-kali-1.0.3-3.7-trunk-686-pae.img
+a6aaec29dad544d9d3c86d3bf63d7486  initrd-kali-1.0.4-3.7-trunk-686-pae.img
+a5bd239b9017943e0e4598ece7e7e85f  initrd-kali-1.0.4-3.7-trunk-amd64.img
+
+EOF
+
+cat << EOF > ${FN_SHA1TMP}
+bb074cad7b6d8e09f936ee7c922a30362d8d7940  kali-linux-1.0-amd64-mini.iso
+f1c1dbce42d88bae4ed5683655701e5847e23246  kali-linux-1.0-i386-mini.iso
+95a0eab94407d7ebf0ec6fbd189d883aa772d21d  kali-linux-1.0.3-amd64.iso
+54af51b9f4bf3d77ecd45e548de308837c546b12  kali-linux-1.0.3-i386.iso
+fed4ae5157237c57d7815e475f7a9ddc38a13208  kali-linux-1.0.4-amd64-mini.iso
+bb14f4e1fc0656a14615e40d727f6c49e8202d38  kali-linux-1.0.4-amd64.iso
+01324e8486f16d7d754e1602b9afe135f5e98c8a  kali-linux-1.0.4-i386-mini.iso
+68b91a8894709cc132ab7cd9eca57513e1ce478b  kali-linux-1.0.4-i386.iso
+EOF
+
+FN_TMP_ETCEXPORTS="/tmp/etcexports"
+FN_TMP_ETCFSTAB="/tmp/etcfstab"
+FN_TMP_TFTPMENU="/tmp/tftpmenu"
+
+tftp_setup_pxe_iso () {
+    PARAM_URL1="$1"
+    shift
+    PARAM_USER_LABEL=
+    if [ $# -gt 0 ]; then
+        PARAM_USER_LABEL="$1"
+        shift
+    fi
+    DIST_URL="${PARAM_URL1}"
+
+    #echo "[DBG] 1 detect_linux_dist ${DIST_URL}" >> "/dev/stderr"
+    detect_linux_dist "${DIST_URL}"
+    DIST_NAME_TYPE="${DECLNXOUT_NAME}"
+    DIST_NAME="${DECLNXOUT_NAME}"
+    DIST_RELEASE="${DECLNXOUT_RELEASE}"
+    DIST_ARCH="${DECLNXOUT_ARCH}"
+    DIST_TYPE="${DECLNXOUT_TYPE}"
+    FLG_LIVE="${DECLNXOUT_FLG_LIVE}"
+    DIST_NAME2="${DECLNXOUT_FLG_NFS}"
+    FLG_NFS=0
+    if [ ! "${A_DIST_NAME}" = "" ]; then
+        DIST_NAME_TYPE="${A_DIST_NAME}"
+        DIST_NAME="${A_DIST_NAME}"
+    fi
+    if [ ! "${A_DIST_RELEASE}" = "" ]; then
+        DIST_RELEASE="${A_DIST_RELEASE}"
+    fi
+    if [ ! "${A_DIST_ARCH}" = "" ]; then
+        DIST_ARCH="${A_DIST_ARCH}"
+    fi
+    if [ ! "${A_DIST_TYPE}" = "" ]; then
+        DIST_TYPE="${A_DIST_TYPE}"
+    fi
+
+    export ISO_NAME=$(basename ${DIST_URL})
+    # if we unable to get information correctly from the name
+    #echo "[DBG] 2 detect_linux_dist ${ISO_NAME}" >> "/dev/stderr"
+    detect_linux_dist "${ISO_NAME}"
+    if [ "${DECLNXOUT_NAME}" = "" ]; then
+        ISO_NAME="${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-${ISO_NAME}"
+    fi
+
+    export DIST_PATHR="${DIST_NAME}/${DIST_RELEASE}/${DIST_ARCH}"
+    export DIST_FILE="${TFTP_ROOT}/downloads/${ISO_NAME}"
+    export DIST_MOUNTPOINT="images-${DIST_TYPE}/${DIST_PATHR}"
+
+    TFTP_TAG_LABEL="${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_${DIST_TYPE}"
+    TFTP_MENU_LABEL="${TFTP_TAG_LABEL}"
+    if [ ! "${PARAM_USER_LABEL}" = "" ]; then
+        TFTP_MENU_LABEL="${PARAM_USER_LABEL}"
+    fi
+
+    echo "[DBG] DIST_NAME=${DIST_NAME}" >> "/dev/stderr"
+    echo "[DBG] DIST_RELEASE=${DIST_RELEASE}" >> "/dev/stderr"
+    echo "[DBG] DIST_ARCH=${DIST_ARCH}" >> "/dev/stderr"
+    echo "[DBG] DIST_TYPE=${DIST_TYPE}" >> "/dev/stderr"
+    echo "[DBG] ISO_NAME=${ISO_NAME}" >> "/dev/stderr"
+    echo "[DBG] DIST_MOUNTPOINT=${DIST_MOUNTPOINT}" >> "/dev/stderr"
+    echo "[DBG] DIST_FILE=${DIST_FILE}" >> "/dev/stderr"
+
+    FLG_QUIT=0
+    if [ "${DIST_NAME}" = "" ]; then
+        FLG_QUIT=1
+        echo "[ERR] Unable to detect the distribution name" >> "/dev/stderr"
+        echo "[ERR]   please specify by --distname option!" >> "/dev/stderr"
+    fi
+    if [ "${DIST_RELEASE}" = "" ]; then
+        FLG_QUIT=1
+        echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
+        echo "[ERR]   please specify by --distrelease option!" >> "/dev/stderr"
+    fi
+    if [ "${DIST_ARCH}" = "" ]; then
+        FLG_QUIT=1
+        echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
+        echo "[ERR]   please specify by --distarch option!" >> "/dev/stderr"
+    fi
+    if [ "${DIST_TYPE}" = "" ]; then
+        FLG_QUIT=1
+        echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
+        echo "[ERR]   please specify by --disttype option!" >> "/dev/stderr"
+    fi
+    if [ "${FLG_QUIT}" = "1" ]; then
+        exit 0
+    fi
+
+    # default values:
+    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.gz"
+    TFTP_APPEND_NFS="boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+    TFTP_APPEND_OTHER="nosplash --"
+    #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
+
+    case "$DIST_NAME" in
+    "debian")
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        else
+            if [ "${DIST_TYPE}" = "net" ]; then
+                DIST_NAME_TYPE="ubuntu"
+            fi
+        fi
+        ;;
+    "fedora")
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        else
+            DIST_TYPE="desktop"
+        fi
+        ;;
+    "mint")
+        DIST_NAME_TYPE="ubuntu"
+        DIST_TYPE="desktop"
+        ;;
+
+    "backtrack")
+        case "$DIST_RELEASE" in
+        4)
+            DIST_TYPE="oldlive"
+            ;;
+        5)
+            DIST_TYPE="live"
+            ;;
+        esac
+        ;;
+
+    "kali")
+        echo "[DBG] dist kali" >> "/dev/stderr"
+        DIST_TYPE="live"
+        ;;
+    esac
+
+    rm -f "${FN_TMP_TFTPMENU}"
+    # setup values
+    TFTP_APPEND_NFS=""
+    case "$DIST_NAME_TYPE" in
+    "gentoo")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/gentoo.igz"
+            TFTP_APPEND_NFS="root=/dev/ram0 loop=/image.squashfs init=/linuxrc looptype=squashfs cdroot=1 real_root=/dev/nfs console=tty1 dokeymap netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/gentoo"
+            ;;
+
+    "debian")
+        echo "[DBG] dist debian" >> "/dev/stderr"
+        case "$DIST_TYPE" in
+        "server")
+            ;;
+        "live")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd1.img"
+            TFTP_APPEND_NFS="root=/dev/nfs boot=live live-config netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz1"
+            ;;
+        *)
+            echo "[ERR] Not supported ubuntu type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
+        ;;
+
+    "ubuntu")
+        echo "[DBG] dist ubuntu" >> "/dev/stderr"
+        case "$DIST_TYPE" in
+        "server")
+            # server, alternate
+            echo "[DBG] type server" >> "/dev/stderr"
+            FLG_NFS=0
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz"
+            TFTP_APPEND_NFS=""
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux"
+            ;;
+        "desktop")
+            # desktop, live?
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
+            TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
+            ;;
+        "net")
+            # netinstall
+            FLG_NFS=0
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/initrd.gz"
+            TFTP_APPEND_NFS=""
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/linux"
+            ;;
+        *)
+            echo "[ERR] Not supported ubuntu type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
+        ;;
+
+    "backtrack")
+        FLG_NFS=1
+        echo "[DBG] dist backtrack" >> "/dev/stderr"
+        case "$DIST_TYPE" in
+        "oldlive")
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/initrd.gz"
+            TFTP_APPEND_NFS="BOOT=casper boot=casper nopersistent rw quite vga=0x317 netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/vmlinuz"
+            ;;
+
+        "live")
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.gz"
+            TFTP_APPEND_NFS="boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
+            ;;
+
+        *)
+            echo "[ERR] Not supported BT type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
+        ;;
+
+    "kali")
+        echo "[DBG] dist kali" >> "/dev/stderr"
+        case "$DIST_TYPE" in
+        "live")
+            FLG_NFS=0
+            # ISO: it's not feasible, the size of iso is larger than 2 GB.
+            #TFTP_APPEND_INITRD="iso raw"
+            #TFTP_KERNEL="KERNEL memdisk\n    INITRD downloads/${ISO_NAME}"
+
+            # NFS:
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
+            TFTP_APPEND_NFS="noconfig=sudo username=root hostname=kali root=/dev/nfs boot=live netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
+
+            mkdir -p "${TFTP_ROOT}/downloads/kali1-fix/"
+            case "$DIST_RELEASE" in
+            "1.0.3")
+                FLG_NFS=1
+                if [ "${DIST_ARCH}" = "i386" ]; then
+                    FN_INITRD=initrd-kali-1.0.3-3.7-trunk-686-pae.img
+                    URL_INITRD="https://www.hashdump.org/files/initrd.img"
+                    echo "[WARNING] Use the i386 patch from" >> "/dev/stderr"
+                    echo "[WARNING]     https://wiki.hashdump.org/index.php/PXE::Kali" >> "/dev/stderr"
+                else
+                    echo "[ERR] Unable to boot from NFS,  please see" >> "/dev/stderr"
+                    echo "[ERR]    https://wiki.hashdump.org/index.php/PXE::Kali" >> "/dev/stderr"
+                    echo "[ERR]    for solution." >> "/dev/stderr"
+                    exit 0
+                    FN_INITRD=initrd-kali-1.0.3-3.7-trunk-amd64.img
+                    URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
+                fi
+                DN_SAVE_INITRD="${TFTP_ROOT}/downloads/kali1-fix/"
+                mkdir -p "${DN_SAVE_INITRD}"
+                down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
+                TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
+                ;;
+
+            "1.0.4")
+                FLG_NFS=1
+                if [ "${DIST_ARCH}" = "i386" ]; then
+                    FN_INITRD=initrd-kali-1.0.4-3.7-trunk-686-pae.img
+                else
+                    FN_INITRD=initrd-kali-1.0.4-3.7-trunk-amd64.img
+                fi
+                URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
+                echo "[WARNING] Use the ${DIST_ARCH} patch from" >> "/dev/stderr"
+                echo "[WARNING]     ${URL_INITRD}" >> "/dev/stderr"
+
+                DN_SAVE_INITRD="${TFTP_ROOT}/downloads/kali1-fix/"
+                mkdir -p "${DN_SAVE_INITRD}"
+                down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
+                TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
+                ;;
+            esac
+            ;;
+        esac
+        ;;
+
+    "fedora")
+        echo "[DBG] dist fedora" >> "/dev/stderr"
+        case "$DIST_TYPE" in
+        "desktop"|"live")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
+            TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
+            ;;
+        *)
+            echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
+        ;;
+
+    "centos")
+        case "$DIST_TYPE" in
+        "server")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd.img"
+            TFTP_APPEND_NFS=""
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz"
+            ;;
+        "net")
+            # netinstall
+            FLG_NFS=0
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/images/pxeboot/initrd.img"
+            TFTP_APPEND_NFS=""
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/images/pxeboot/vmlinuz"
+            ;;
+        *)
+            echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
+        ;;
+
+    "arch")
+            # dual option 1: load ISO to memory
+            # all of the command lines are passed
+            cat << EOF > "${FN_TMP_TFTPMENU}"
+LABEL ${TFTP_TAG_LABEL}_iso
+    MENU LABEL ${TFTP_MENU_LABEL} (ISO)
+    KERNEL memdisk
+    #LINUX memdisk
+    INITRD downloads/${ISO_NAME}
+    #APPEND iso
+    APPEND iso raw
+EOF
+
+            # dual option 2-1: NFS i686 
+            FLG_NFS=1
+            ITYPE="i686"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
+            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            TFTP_APPEND_OTHER=""
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
+            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+
+            cat << EOF >> "${FN_TMP_TFTPMENU}"
+LABEL ${TFTP_TAG_LABEL}_i686
+    MENU LABEL ${TFTP_MENU_LABEL} (i686)
+    ${TFTP_KERNEL}
+    ${TFTP_APPEND}
+EOF
+
+            # dual option 2-2: NFS x86_64
+            ITYPE="x86_64"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
+            TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            TFTP_APPEND_OTHER=""
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
+            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+        ;;
+    *)
+        echo "[ERR] Not supported distribution: ${DIST_NAME}" >> "/dev/stderr"
+        exit 0
+        ;;
+    esac
+
+    TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+    cat << EOF >> "${FN_TMP_TFTPMENU}"
+LABEL ${TFTP_TAG_LABEL}
+    MENU LABEL ${TFTP_MENU_LABEL}
+    ${TFTP_KERNEL}
+    ${TFTP_APPEND}
+EOF
+
+    echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+    if [ "${FLG_NFS}" = "1" ]; then
+        echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
+    fi
+
+    echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
+    echo "[INFO] You may want to mount the ISO by manual to test the file:" >> "/dev/stderr"
+    echo "[INFO]   mkdir -p '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
+    echo "[INFO]   mount -o loop,utf8 '${DIST_FILE}' '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
+    echo "[INFO] The following content will be attached to the file '/etc/fstab':" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    cat "${FN_TMP_ETCFSTAB}" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "[INFO] ==============================================================" >> "/dev/stderr"
+
+    if [ "${FLG_NFS}" = "1" ]; then
+        echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
+        echo "[INFO] The following content will be attached to the file '/etc/exports':" >> "/dev/stderr"
+        echo "" >> "/dev/stderr"
+        cat "${FN_TMP_ETCEXPORTS}" >> "/dev/stderr"
+        echo "" >> "/dev/stderr"
+        echo "[INFO] ==============================================================" >> "/dev/stderr"
+    fi >> "/dev/stderr"
+
+    echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
+    echo "[INFO] The following content will be attached to the file" >> "/dev/stderr"
+    echo "[INFO]    '${TFTP_ROOT}/netboot/pxelinux.cfg/default':" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    cat "${FN_TMP_TFTPMENU}" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "[INFO] ==============================================================" >> "/dev/stderr"
+
+    if [ "${FLG_NOINTERACTIVE}" = "0" ]; then
+        read -rsn 1 -p "Press any key to continue..."
+    fi
+    #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
+
+    # download and check the file
+    down_url "${DIST_URL}" "${DIST_FILE}"
+
+    # -- ISO file mount point: /etc/fstab
+    mkdir -p "${TFTP_ROOT}/${DIST_MOUNTPOINT}/"
+    umount "${DIST_FILE}"
+    umount "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+    #mount -o loop,utf8 "${DIST_FILE}" ${TFTP_ROOT}/${DIST_MOUNTPOINT}
+    if [ ! "${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
+        grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/fstab > /tmp/bbb
+    else
+        cp /etc/fstab /tmp/bbb
+    fi
+    if [ ! "${DIST_FILE}" = "" ]; then
+        grep -v "${DIST_FILE}" /tmp/bbb > /tmp/aaa
+    else
+        cp /tmp/bbb /tmp/aaa
+    fi
+    diff -Nbu /etc/fstab /tmp/aaa
+    RET=$?
+    if [ ! "$RET" = "0" ]; then
+        # backup the old fstab
+        echo "[INFO] the old /etc/fstab saved to /etc/fstab-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
+        cp /etc/fstab /etc/fstab-$(date "+%Y%m%d-%H%M%S")
+        # update the fatab
+        mv /tmp/aaa /etc/fstab
+    fi
+    cat "${FN_TMP_ETCFSTAB}" >> /etc/fstab
+    mount -a
+
+    # -- NFS
+    if [ "${FLG_NFS}" = "1" ]; then
+        if [ ! "${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
+            grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/exports > /tmp/aaa
+            # backup the old exports
+            echo "[INFO] the old /etc/exports saved to /etc/exports-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
+            cp /etc/exports /etc/exports-$(date "+%Y%m%d-%H%M%S")
+            # update exports
+            mv /tmp/aaa /etc/exports
+        fi
+        cat "${FN_TMP_ETCEXPORTS}" >> /etc/exports
+        sudo service nfs-kernel-server restart # Debian/Ubuntu
+        service nfs restart   # RedHat/CentOS
+    fi
+
+    # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
+    cat "${FN_TMP_TFTPMENU}" >> "${TFTP_ROOT}/netboot/pxelinux.cfg/default"
+
+    # -- TFTP menu msg: ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    if [ ! "${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_nfs" = "" ]; then
+        grep -v "${TFTP_TAG_LABEL}" ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt > /tmp/aaa
+        mv /tmp/aaa ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    fi
+    echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    /etc/init.d/tftpd-hpa restart # debian/ubuntu
+    service xinetd restart # redhat/centos
+}
+
+process_file_list () {
+    #FN_MD5SUM=$1
+    #shift
+
+    #echo "[DBG] begin 1" >> "/dev/stderr"
+    while :
+    do
+        #echo "[DBG] read 1" >> "/dev/stderr"
+        read TMPFN
+        if [ "${TMPFN}" = "" ]; then
+            #echo "[DBG] End of TMPFN" >> "/dev/stderr"
+            break;
+        fi
+        if [ "${TITLE_BOOT}" = "" ]; then
+            echo "[DBG] tftp_setup_pxe_iso '${TMPFN}'" >> "/dev/stderr"
+            tftp_setup_pxe_iso "${TMPFN}"
+        else
+            echo "[DBG] tftp_setup_pxe_iso '${TMPFN}' '${TITLE_BOOT}'" >> "/dev/stderr"
+            tftp_setup_pxe_iso "${TMPFN}" "${TITLE_BOOT}"
+        fi
+    done
+}
+
+test_down_some_iso () {
+    down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-32.iso"
+    #down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-64.iso"
+    #down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-GNOME-32.iso"
+    #down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-GNOME-64.iso"
+
+    #down_url "http://mirrors.kernel.org/archlinux/iso/2013.07.01/archlinux-2013.07.01-dual.iso"
+    #down_url "http://www.gtlib.gatech.edu/pub/archlinux/iso/2013.07.01/archlinux-2013.07.01-dual.iso"
+
+    #down_url  "http://archive.ubuntu.com/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso" "ubuntu-mini-amd64-quantal.iso"
+    #down_url "http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso" "ubuntu-mini-amd64-quantal.iso"
+
+    #tftp_setup_pxe_iso "ftp://189.115.48.10/linux/bt4-final.iso"
+    #tftp_setup_pxe_iso "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-32.iso"
+    #tftp_setup_pxe_iso "http://archive-5.kali.org/kali-images/kali-linux-1.0.4-i386.iso"
+    #tftp_setup_pxe_iso "http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso"
+}
+
+echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
+process_file_list "" < "${FN_TMP_LIST}"
+
+#rm -f "${FN_TMP_LIST}"
+echo "Done!" >> "/dev/stderr"
