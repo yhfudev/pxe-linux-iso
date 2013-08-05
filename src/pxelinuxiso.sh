@@ -24,6 +24,9 @@ FN_TMP_LASTMSG="/tmp/pxelinuxiso-lastmsg"
 # the iso file list saved from arguments
 FN_TMP_LIST="/tmp/tftp-iso-file-list"
 
+export TFTP_ROOT=/var/lib/tftpboot
+export DIST_NFSIP=192.168.0.1
+
 ############################################################
 # detect the linux distribution
 FN_AWK_DET_ISO="/tmp/detlinuxiso.awk"
@@ -753,12 +756,15 @@ down_url () {
         #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
 
         echo "[DBG] " download_file "${DN_SRCS}" "${MD5SUM_DW}" "${FN_SINGLE}" "${PARAM_URL0}" >> "/dev/stderr"
-        rm -f "${DN_SRCS}/${FN_SINGLE}"
-        wget -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
+        RET=0
+        $MYEXEC rm -f "${DN_SRCS}/${FN_SINGLE}"
+        $MYEXEC wget -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
         RET=$?
         if [ ${RET} = 0 ]; then
-            md5sum  "${DN_SRCS}/${FN_SINGLE}" >> "${DN_SRCS}/MD5SUMS"
-            sha1sum "${DN_SRCS}/${FN_SINGLE}" >> "${DN_SRCS}/SHA1SUMS"
+            md5sum  "${DN_SRCS}/${FN_SINGLE}" > /tmp/md5sum-down
+            $MYEXEC attach_to_file /tmp/md5sum-down "${DN_SRCS}/MD5SUMS"
+            sha1sum "${DN_SRCS}/${FN_SINGLE}" > /tmp/sha1sum-down
+            $MYEXEC attach_to_file /tmp/sha1sum-down "${DN_SRCS}/SHA1SUMS"
         else
             echo "[ERR] download file ${PARAM_URL0} error!" >> "/dev/stderr"
             echo "[DBG] exit 0" >> "/dev/stderr"
@@ -766,9 +772,6 @@ down_url () {
         fi
     fi
 }
-
-export TFTP_ROOT=/var/lib/tftpboot
-export DIST_NFSIP=192.168.0.1
 
 tftp_init_directories () {
     # Ubuntu: /usr/lib/syslinux/
@@ -782,56 +785,56 @@ tftp_init_directories () {
         ;;
     esac
 
-    mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
 
-    mkdir -p "${TFTP_ROOT}/images-server/"
-    mkdir -p "${TFTP_ROOT}/images-desktop/"
-    mkdir -p "${TFTP_ROOT}/images-net/"
-    mkdir -p "${TFTP_ROOT}/downloads/"
-    mkdir -p "${TFTP_ROOT}/kickstarts/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-desktop/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-net/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
 
-    mkdir -p "${HTTPD_ROOT}"
+    $MYEXEC mkdir -p "${HTTPD_ROOT}"
 
     # setup downloads folder, all of the ISO files will be stored here
-    mkdir -p "${TFTP_ROOT}/downloads/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
 }
 
 tftp_init_service () {
     tftp_init_directories
-    mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
 
-    alias cp=cp
-    cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
-    cp "${SYSLINUX_ROOT}/menu.c32"   "${TFTP_ROOT}/netboot/"
-    cp "${SYSLINUX_ROOT}/memdisk"    "${TFTP_ROOT}/netboot/"
-    cp "${SYSLINUX_ROOT}/mboot.c32"  "${TFTP_ROOT}/netboot/"
-    cp "${SYSLINUX_ROOT}/chain.c32"  "${TFTP_ROOT}/netboot/"
+    $MYEXEC alias cp=cp
+    $MYEXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
+    $MYEXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${TFTP_ROOT}/netboot/"
+    $MYEXEC cp "${SYSLINUX_ROOT}/memdisk"    "${TFTP_ROOT}/netboot/"
+    $MYEXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${TFTP_ROOT}/netboot/"
+    $MYEXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${TFTP_ROOT}/netboot/"
 
     # 然后构建文件链接：(注意链接要使用相对链接文件所在目录的路径!)
-    mkdir -p "${TFTP_ROOT}/images-server/"
-    mkdir -p "${TFTP_ROOT}/images-desktop/"
-    mkdir -p "${TFTP_ROOT}/images-net/"
-    mkdir -p "${TFTP_ROOT}/downloads/"
-    mkdir -p "${TFTP_ROOT}/kickstarts/"
-    cd "${TFTP_ROOT}/netboot"
-    ln -s ../images-server/
-    ln -s ../images-desktop/
-    ln -s ../images-net/
-    ln -s ../downloads/
-    ln -s ../kickstarts/
-    cd -
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-desktop/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-net/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
+    $MYEXEC cd "${TFTP_ROOT}/netboot"
+    $MYEXEC ln -s ../images-server/
+    $MYEXEC ln -s ../images-desktop/
+    $MYEXEC ln -s ../images-net/
+    $MYEXEC ln -s ../downloads/
+    $MYEXEC ln -s ../kickstarts/
+    $MYEXEC cd -
 
-    mkdir -p "${HTTPD_ROOT}"
-    cd "${HTTPD_ROOT}"
-    ln -s "${TFTP_ROOT}/images-server/"
-    ln -s "${TFTP_ROOT}/images-desktop/"
-    ln -s "${TFTP_ROOT}/images-net/"
-    ln -s "${TFTP_ROOT}/downloads/"
-    ln -s "${TFTP_ROOT}/kickstarts/"
-    cd -
+    $MYEXEC mkdir -p "${HTTPD_ROOT}"
+    $MYEXEC cd "${HTTPD_ROOT}"
+    $MYEXEC ln -s "${TFTP_ROOT}/images-server/"
+    $MYEXEC ln -s "${TFTP_ROOT}/images-desktop/"
+    $MYEXEC ln -s "${TFTP_ROOT}/images-net/"
+    $MYEXEC ln -s "${TFTP_ROOT}/downloads/"
+    $MYEXEC ln -s "${TFTP_ROOT}/kickstarts/"
+    $MYEXEC cd -
 
     # set the header of configuration file
-    cat > ${TFTP_ROOT}/netboot/pxelinux.cfg/default << EOF
+    cat > /tmp/tmptftpdefault << EOF
 #PROMPT 1
 #TIMEOUT 0
 #DISPLAY pxelinux.cfg/boot.txt
@@ -850,11 +853,13 @@ LABEL local
         LOCALBOOT 0
 
 EOF
+    $MYEXEC cp /tmp/tmptftpdefault ${TFTP_ROOT}/netboot/pxelinux.cfg/default
 
-    cat > ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt << EOF
+    cat > /tmp/tmptftpboot << EOF
 Available Boot Options:
 =======================
 EOF
+    $MYEXEC cp /tmp/tmptftpboot ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
 }
 
 #####################################################################
@@ -1288,21 +1293,21 @@ tftp_setup_pxe_iso () {
                 URL_PKG3="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.8.019_-20130503212031-gaxgocw9r3bsn1mo-1/linux-headers-3.8.0-19_3.8.0-19.30_all.deb"
               fi
               if [ ! "${URL_VMLINUZ}" = "" ]; then
-                mkdir -p "${TFTP_ROOT}/downloads/"
-                mkdir -p "${TFTP_ROOT}/kickstarts/"
-                cd "${TFTP_ROOT}/netboot/"
-                ln -s "../downloads/"
-                ln -s "../kickstarts/"
-                #down_url "${URL_INITRD}"
-                #down_url "${URL_VMLINUZ}"
-                #down_url "${URL_PKG1}"
-                #down_url "${URL_PKG2}"
-                #down_url "${URL_PKG3}"
-                wget -c "${URL_INITRD}"  -O "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
-                wget -c "${URL_VMLINUZ}" -O "${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
-                wget -c "${URL_PKG1}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
-                wget -c "${URL_PKG2}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
-                wget -c "${URL_PKG3}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
+                $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
+                $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
+                $MYEXEC cd "${TFTP_ROOT}/netboot/"
+                $MYEXEC ln -s "../downloads/"
+                $MYEXEC ln -s "../kickstarts/"
+                #$MYEXEC down_url "${URL_INITRD}"
+                #$MYEXEC down_url "${URL_VMLINUZ}"
+                #$MYEXEC down_url "${URL_PKG1}"
+                #$MYEXEC down_url "${URL_PKG2}"
+                #$MYEXEC down_url "${URL_PKG3}"
+                $MYEXEC wget -c "${URL_INITRD}"  -O "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
+                $MYEXEC wget -c "${URL_VMLINUZ}" -O "${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
+                $MYEXEC wget -c "${URL_PKG1}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
+                $MYEXEC wget -c "${URL_PKG2}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
+                $MYEXEC wget -c "${URL_PKG3}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
 
                 TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
                 TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
