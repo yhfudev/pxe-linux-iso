@@ -125,16 +125,50 @@ ospkgset tcpdump            tcpdump            tcpdump
 ospkgset tcptrace           tcptrace           tcptrace
 ospkgset octave             octave             octave
 
+patch_centos_gawk () {
+    yum -y install rpmdevtools readline-devel #libsigsegv-devel
+    rpmdev-setuptree
+
+    #FILELIST="gawk.spec gawk-3.1.8.tar.bz2 gawk-3.1.8-double-free-wstptr.patch gawk-3.1.8-syntax.patch"
+    #URL="http://archive.fedoraproject.org/pub/archive/fedora/linux/updates/14/SRPMS/gawk-3.1.8-3.fc14.src.rpm"
+    FILELIST="gawk.spec gawk-4.0.1.tar.gz"
+    URL="http://archive.fedoraproject.org/pub/archive/fedora/linux/updates/17/SRPMS/gawk-4.0.1-1.fc17.src.rpm"
+    cd ~/rpmbuild/SOURCES/; rm -f ${FILELIST}; cd - ; rm -f ${FILELIST}
+    wget "${URL}" -O ~/rpmbuild/SRPMS/$(basename "${URL}")
+    rpm2cpio ~/rpmbuild/SRPMS/$(basename "${URL}") | cpio -div
+    mv ${FILELIST} ~/rpmbuild/SOURCES/
+    sed -i 's@configure @configure --enable-switch --disable-libsigsegv @g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
+    sed -i 's@--with-libsigsegv-prefix=[^ ]*@@g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
+    sed -i 's@Conflicts: filesystem@#Conflicts: filesystem@g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
+    rpmbuild -bb --clean ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
+    sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -i)/gawk-4.0.1-1.el6.$(uname -i).rpm
+    ln -s $(which gawk) /bin/gawk
+}
+
 install_package () {
     PARAM_NAME=$*
     INSTALLER=`ospkgget $OSTYPE apt-get`
     PKGLST=
+    FLG_GAWK_RH=0
     for i in $PARAM_NAME ; do
         PKG=`ospkgget $OSTYPE $i`
         echo "try to install package: $PKG($i)"
+        if [ "$i" = "gawk" ]; then
+            if [ "" = "RedHat" ]; then
+                # patch gawk to support 'switch'
+                echo | gawk '{a = 1; switch(a) { case 0: break; } }'
+                if [ $? = 1 ]; then
+                    FLG_GAWK_RH=1
+                    PKGLST="${PKGLST} rpmdevtools libsigsegv-devel readline-devel"
+                fi
+            fi
+        fi
         PKGLST="${PKGLST} ${PKG}"
     done
     sudo $INSTALLER install -y ${PKGLST}
+    if [ "${FLG_GAWK_RH}" = "1" ]; then
+        patch_centos_gawk
+    fi
 }
 
 detect_os_type

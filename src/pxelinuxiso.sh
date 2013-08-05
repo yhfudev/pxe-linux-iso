@@ -20,6 +20,10 @@ fi
 
 . ${DN_EXEC}/libbash.sh
 
+FN_TMP_LASTMSG="/tmp/pxelinuxiso-lastmsg"
+# the iso file list saved from arguments
+FN_TMP_LIST="/tmp/tftp-iso-file-list"
+
 ############################################################
 # detect the linux distribution
 FN_AWK_DET_ISO="/tmp/detlinuxiso.awk"
@@ -619,6 +623,11 @@ check_xxxsum () {
     PARAM_RENAME1=$1
     shift
 
+    echo "[DBG] PARAM_SUMNAME=$PARAM_SUMNAME" >> "/dev/stderr"
+    echo "[DBG] PARAM_PROGNAME=$PARAM_PROGNAME" >> "/dev/stderr"
+    echo "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM" >> "/dev/stderr"
+    echo "[DBG] PARAM_RENAME1=$PARAM_RENAME1" >> "/dev/stderr"
+
     FLG_DW=1
     if [ -f "${PARAM_RENAME1}" ]; then
         echo "[DBG] 1 set flg_dw back to 0" >> "/dev/stderr"
@@ -730,10 +739,10 @@ down_url () {
     echo "[DBG] DN_SRCS=$DN_SRCS" >> "/dev/stderr"
 
     MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
-    FLG_DOWN=$(  check_xxxsum MD5SUMS md5sum ${MD5SUM_STATIC} "${PARAM_RENAME}" )
+    FLG_DOWN=$(  check_xxxsum MD5SUMS md5sum "${MD5SUM_STATIC}" "${PARAM_RENAME}" )
     if [ "${FLG_DOWN}" = "1" ]; then
         MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | awk '{print $1}')
-        FLG_DOWN=$(  check_xxxsum SHA1SUMS sha1sum ${MD5SUM_STATIC} "${PARAM_RENAME}"  )
+        FLG_DOWN=$(  check_xxxsum SHA1SUMS sha1sum "${MD5SUM_STATIC}" "${PARAM_RENAME}"  )
     fi
 
     if [ "${FLG_DOWN}" = "1" ]; then
@@ -778,6 +787,8 @@ tftp_init_directories () {
     mkdir -p "${TFTP_ROOT}/images-server/"
     mkdir -p "${TFTP_ROOT}/images-desktop/"
     mkdir -p "${TFTP_ROOT}/images-net/"
+    mkdir -p "${TFTP_ROOT}/downloads/"
+    mkdir -p "${TFTP_ROOT}/kickstarts/"
 
     mkdir -p "${HTTPD_ROOT}"
 
@@ -787,7 +798,7 @@ tftp_init_directories () {
 
 tftp_init_service () {
     tftp_init_directories
-    mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
+    mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
 
     alias cp=cp
     cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
@@ -800,11 +811,14 @@ tftp_init_service () {
     mkdir -p "${TFTP_ROOT}/images-server/"
     mkdir -p "${TFTP_ROOT}/images-desktop/"
     mkdir -p "${TFTP_ROOT}/images-net/"
+    mkdir -p "${TFTP_ROOT}/downloads/"
+    mkdir -p "${TFTP_ROOT}/kickstarts/"
     cd "${TFTP_ROOT}/netboot"
     ln -s ../images-server/
     ln -s ../images-desktop/
     ln -s ../images-net/
     ln -s ../downloads/
+    ln -s ../kickstarts/
     cd -
 
     mkdir -p "${HTTPD_ROOT}"
@@ -812,6 +826,8 @@ tftp_init_service () {
     ln -s "${TFTP_ROOT}/images-server/"
     ln -s "${TFTP_ROOT}/images-desktop/"
     ln -s "${TFTP_ROOT}/images-net/"
+    ln -s "${TFTP_ROOT}/downloads/"
+    ln -s "${TFTP_ROOT}/kickstarts/"
     cd -
 
     # set the header of configuration file
@@ -863,6 +879,7 @@ usage () {
     echo "  --tftproot <DIR>  set the tftp root folder, default: ${TFTP_ROOT}" >> "/dev/stderr"
     echo "  --nfsip <IP>      set NFS server IP, default: ${DIST_NFSIP}" >> "/dev/stderr"
     echo "  --title <NAME>    set the boot title" >> "/dev/stderr"
+    echo "  --nonpae          add non-PAE for old machine" >> "/dev/stderr"
 
     echo "  --distname <NAME> set the OS type of ISO, such as centos, ubuntu, arch" >> "/dev/stderr"
     echo "  --distarch <NAME> set the arch of the OS, such as amd64, x86_64, i386, i686" >> "/dev/stderr"
@@ -870,6 +887,7 @@ usage () {
     echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." >> "/dev/stderr"
 
     echo "  --nointeractive|-n  no interative" >> "/dev/stderr"
+    echo "  --simulate|-s       not do the real work, just show the info" >> "/dev/stderr"
     echo "" >> "/dev/stderr"
     echo "Features" >> "/dev/stderr"
     echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" >> "/dev/stderr"
@@ -924,13 +942,18 @@ usage () {
     echo "" >> "/dev/stderr"
 }
 
-# the iso file list saved from arguments
-FN_TMP_LIST="/tmp/tftp-iso-file-list"
 rm -f "${FN_TMP_LIST}"
+rm -f "${FN_TMP_LASTMSG}"
+touch "${FN_TMP_LASTMSG}"
 
 # init tftp directory?
 FLG_INIT_TFTPROOT=0
+# add non-PAE installation (for Ubuntu)
+FLG_NON_PAE=0
+# ask user for choices?
 FLG_NOINTERACTIVE=0
+# simulate
+FLG_SIMULATE=0
 FN_FULL=""
 TITLE_BOOT=""
 A_DIST_NAME=""
@@ -977,6 +1000,12 @@ while [ ! "$1" = "" ]; do
     --nointeractive|-n)
         FLG_NOINTERACTIVE=1
         ;;
+    --simulate|-s)
+        FLG_SIMULATE=1
+        ;;
+    --nonpae|--nopae)
+        FLG_NON_PAE=1
+        ;;
     -*)
         echo "Use option --help to get the usages." >> "/dev/stderr"
         exit 1
@@ -997,17 +1026,27 @@ if [ "${FN_FULL}" = "" ]; then
     exit 1
 fi
 
-install_package wget coreutils nfs-common nfs-kernel-server portmap
+# attach the content of a file to the end of another file.
+attach_to_file () {
+    if [ -f "$1" ]; then
+        cat "$1" >> "$2"
+    fi
+}
+
+myexec_ignore () {
+    echo "[DBG] (skip) $*"
+}
+MYEXEC=
+if [ $FLG_SIMULATE = 1 ]; then
+    MYEXEC=myexec_ignore
+fi
+
+install_package wget coreutils
 
 tftp_init_directories
 if [ "${FLG_INIT_TFTPROOT}" = "1" ]; then
     tftp_init_service
 fi
-
-# 从 Ubuntu mini iso 下载链接中生成存储文件名
-ubuntu_mini_iso_genname () {
-    //TODO
-}
 
 cat << EOF > ${FN_MD5TMP}
 0c5fab6fff4c431a8827754f0b3bc13f  archlinux-2013.07.01-dual.iso
@@ -1018,6 +1057,12 @@ afb8c6192a2e1d1ba0fa3db9c531be6d  pentoo-i686-2013.0_RC1.8.iso
 9ed0286a23eeae77be6fd9b952c5f62c  initrd-kali-1.0.3-3.7-trunk-686-pae.img
 a6aaec29dad544d9d3c86d3bf63d7486  initrd-kali-1.0.4-3.7-trunk-686-pae.img
 a5bd239b9017943e0e4598ece7e7e85f  initrd-kali-1.0.4-3.7-trunk-amd64.img
+
+c187e39bdb6e09283a8976caadd756b6  linux-headers-3.8.0-19_3.8.0-19.30_all.deb
+037f96bdbfef9c587289c58532e40f47  linux-headers-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
+a7ef8da234153e7c8daba0f82f282df8  linux-image-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
+0f707986757bd93a4f0efb9b521aca38  initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz
+d3374a10f71468978428a383c3267aae  vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386
 
 EOF
 
@@ -1210,6 +1255,7 @@ tftp_setup_pxe_iso () {
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux"
             ;;
+
         "desktop")
             # desktop, live?
             FLG_NFS=1
@@ -1217,7 +1263,83 @@ tftp_setup_pxe_iso () {
             TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
+
+            if [ "${FLG_NON_PAE}" = "1" ]; then
+              URL_VMLINUZ=
+              if [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 11) print 1; else print 0; }') = 1 ]; then
+                echo "Ubuntu 10 or lower support non-PAE. No need to use special steps"
+              elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 12) print 1; else print 0; }') = 1 ]; then
+                # version 11.x
+                echo ""
+              elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 13) print 1; else print 0; }') = 1 ]; then
+                # version 12.x
+                URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.5.017wtnonp-20121104150059-2ifucieir3hr7d7r-1/vmlinuz-3.5.0-17-wt-non-pae_3.5.0-17.28_i386"
+                URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.5.017wtnonpa-20121104150054-x38900ty5mmg8bub-1/initrd-3.5.0-17-wt-non-pae_3.5.0-17.28_i386.lz"
+                URL_PKG1="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuximage3.5.027wtn-20130411174046-2g7c1jtopun2y43m-1/linux-image-3.5.0-27-wt-non-pae_3.5.0-27.46_i386.deb"
+                URL_PKG2="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.5.027w-20130411174046-2g7c1jtopun2y43m-3/linux-headers-3.5.0-27-wt-non-pae_3.5.0-27.46_i386.deb"
+                URL_PKG3="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.5.027_-20130411174046-2g7c1jtopun2y43m-2/linux-headers-3.5.0-27_3.5.0-27.46_all.deb"
+
+              elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 14) print 1; else print 0; }') = 1 ]; then
+                # version 13.x
+                URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.8.019wtnonpa-20130429091312-e20cgo6obhlyk3fi-1/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz"
+                URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.8.019wtnonp-20130429091312-e20cgo6obhlyk3fi-5/vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386"
+                URL_PKG1="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuximage3.8.019wtn-20130503212031-gaxgocw9r3bsn1mo-3/linux-image-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb"
+                URL_PKG2="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.8.019w-20130503212031-gaxgocw9r3bsn1mo-2/linux-headers-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb"
+                URL_PKG3="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.8.019_-20130503212031-gaxgocw9r3bsn1mo-1/linux-headers-3.8.0-19_3.8.0-19.30_all.deb"
+              fi
+              if [ ! "${URL_VMLINUZ}" = "" ]; then
+                mkdir -p "${TFTP_ROOT}/downloads/"
+                mkdir -p "${TFTP_ROOT}/kickstarts/"
+                cd "${TFTP_ROOT}/netboot/"
+                ln -s "../downloads/"
+                ln -s "../kickstarts/"
+                #down_url "${URL_INITRD}"
+                #down_url "${URL_VMLINUZ}"
+                #down_url "${URL_PKG1}"
+                #down_url "${URL_PKG2}"
+                #down_url "${URL_PKG3}"
+                wget -c "${URL_INITRD}"  -O "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
+                wget -c "${URL_VMLINUZ}" -O "${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
+                wget -c "${URL_PKG1}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
+                wget -c "${URL_PKG2}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
+                wget -c "${URL_PKG3}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
+
+                TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
+                TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
+                TFTP_KERNEL="KERNEL downloads/$(basename ${URL_VMLINUZ})"
+                TFTP_MENU_LABEL="${TFTP_MENU_LABEL} non-PAE"
+                TFTP_TAG_LABEL="${TFTP_TAG_LABEL}_nonpae"
+                # kickstart:
+                FN_KS="ks-${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-nonpae.ks"
+                cat << EOF > "${TFTP_ROOT}/kickstarts/${FN_KS}"
+%post
+#wget "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG1})"
+#wget "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG2})"
+#wget "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG3})"
+
+wget "${URL_PKG1}"
+wget "${URL_PKG2}"
+wget "${URL_PKG3}"
+
+dpkg --root=/target -i $(basename ${URL_PKG1})
+dpkg --root=/target -i $(basename ${URL_PKG2})
+dpkg --root=/target -i $(basename ${URL_PKG3})
+%end
+EOF
+                TFTP_APPEND_OTHER="ks=http://${DIST_NFSIP}/kickstarts/${FN_KS} ${TFTP_APPEND_OTHER}"
+echo "You may want to install non-PAE Linux kernel before the system reboots:" >> "${FN_TMP_LASTMSG}"
+echo "  (press ALT+CTRL+F1 to switch to the console)" >> "${FN_TMP_LASTMSG}"
+echo "    wget '${URL_PKG1}'" >> "${FN_TMP_LASTMSG}"
+echo "    wget '${URL_PKG2}'" >> "${FN_TMP_LASTMSG}"
+echo "    wget '${URL_PKG3}'" >> "${FN_TMP_LASTMSG}"
+echo "    dpkg --root=/target -i $(basename ${URL_PKG1})" >> "${FN_TMP_LASTMSG}"
+echo "    dpkg --root=/target -i $(basename ${URL_PKG2})" >> "${FN_TMP_LASTMSG}"
+echo "    dpkg --root=/target -i $(basename ${URL_PKG3})" >> "${FN_TMP_LASTMSG}"
+
+              fi
+            fi
             ;;
+
         "net")
             # netinstall
             FLG_NFS=0
@@ -1226,6 +1348,7 @@ tftp_setup_pxe_iso () {
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/linux"
             ;;
+
         *)
             echo "[ERR] Not supported ubuntu type: ${DIST_TYPE}" >> "/dev/stderr"
             exit 0
@@ -1272,7 +1395,7 @@ tftp_setup_pxe_iso () {
             TFTP_APPEND_NFS="noconfig=sudo username=root hostname=kali root=/dev/nfs boot=live netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
 
-            mkdir -p "${TFTP_ROOT}/downloads/kali1-fix/"
+            $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/kali1-fix/"
             case "$DIST_RELEASE" in
             "1.0.3")
                 FLG_NFS=1
@@ -1290,8 +1413,8 @@ tftp_setup_pxe_iso () {
                     URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
                 fi
                 DN_SAVE_INITRD="${TFTP_ROOT}/downloads/kali1-fix/"
-                mkdir -p "${DN_SAVE_INITRD}"
-                down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
+                $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
+                $MYEXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
                 TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
                 ;;
 
@@ -1307,8 +1430,8 @@ tftp_setup_pxe_iso () {
                 echo "[WARNING]     ${URL_INITRD}" >> "/dev/stderr"
 
                 DN_SAVE_INITRD="${TFTP_ROOT}/downloads/kali1-fix/"
-                mkdir -p "${DN_SAVE_INITRD}"
-                down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
+                $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
+                $MYEXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
                 TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
                 ;;
             esac
@@ -1445,15 +1568,16 @@ EOF
         read -rsn 1 -p "Press any key to continue..."
     fi
     #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
+    $MYEXEC install_package nfs-common nfs-kernel-server portmap
 
     # download and check the file
-    down_url "${DIST_URL}" "${DIST_FILE}"
+    $MYEXEC down_url "${DIST_URL}" "${DIST_FILE}"
 
     # -- ISO file mount point: /etc/fstab
-    mkdir -p "${TFTP_ROOT}/${DIST_MOUNTPOINT}/"
-    umount "${DIST_FILE}"
-    umount "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-    #mount -o loop,utf8 "${DIST_FILE}" ${TFTP_ROOT}/${DIST_MOUNTPOINT}
+    $MYEXEC mkdir -p "${TFTP_ROOT}/${DIST_MOUNTPOINT}/"
+    $MYEXEC umount "${DIST_FILE}"
+    $MYEXEC umount "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+    #$MYEXEC mount -o loop,utf8 "${DIST_FILE}" ${TFTP_ROOT}/${DIST_MOUNTPOINT}
     if [ ! "${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
         grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/fstab > /tmp/bbb
     else
@@ -1469,12 +1593,12 @@ EOF
     if [ ! "$RET" = "0" ]; then
         # backup the old fstab
         echo "[INFO] the old /etc/fstab saved to /etc/fstab-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-        cp /etc/fstab /etc/fstab-$(date "+%Y%m%d-%H%M%S")
+        $MYEXEC cp /etc/fstab /etc/fstab-$(date "+%Y%m%d-%H%M%S")
         # update the fatab
-        mv /tmp/aaa /etc/fstab
+        $MYEXEC mv /tmp/aaa /etc/fstab
     fi
-    cat "${FN_TMP_ETCFSTAB}" >> /etc/fstab
-    mount -a
+    $MYEXEC attach_to_file "${FN_TMP_ETCFSTAB}" /etc/fstab
+    $MYEXEC mount -a
 
     # -- NFS
     if [ "${FLG_NFS}" = "1" ]; then
@@ -1482,26 +1606,26 @@ EOF
             grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/exports > /tmp/aaa
             # backup the old exports
             echo "[INFO] the old /etc/exports saved to /etc/exports-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-            cp /etc/exports /etc/exports-$(date "+%Y%m%d-%H%M%S")
+            $MYEXEC cp /etc/exports /etc/exports-$(date "+%Y%m%d-%H%M%S")
             # update exports
-            mv /tmp/aaa /etc/exports
+            $MYEXEC mv /tmp/aaa /etc/exports
         fi
-        cat "${FN_TMP_ETCEXPORTS}" >> /etc/exports
-        sudo service nfs-kernel-server restart # Debian/Ubuntu
-        service nfs restart   # RedHat/CentOS
+        $MYEXEC attach_to_file "${FN_TMP_ETCEXPORTS}" /etc/exports
+        $MYEXEC sudo service nfs-kernel-server restart # Debian/Ubuntu
+        $MYEXEC service nfs restart   # RedHat/CentOS
     fi
 
     # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
-    cat "${FN_TMP_TFTPMENU}" >> "${TFTP_ROOT}/netboot/pxelinux.cfg/default"
+    $MYEXEC attach_to_file "${FN_TMP_TFTPMENU}" "${TFTP_ROOT}/netboot/pxelinux.cfg/default"
 
     # -- TFTP menu msg: ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
     if [ ! "${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_nfs" = "" ]; then
         grep -v "${TFTP_TAG_LABEL}" ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt > /tmp/aaa
-        mv /tmp/aaa ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+        $MYEXEC mv /tmp/aaa ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
     fi
-    echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
-    /etc/init.d/tftpd-hpa restart # debian/ubuntu
-    service xinetd restart # redhat/centos
+    $MYEXEC echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    $MYEXEC /etc/init.d/tftpd-hpa restart # debian/ubuntu
+    $MYEXEC service xinetd restart # redhat/centos
 }
 
 process_file_list () {
@@ -1543,6 +1667,9 @@ test_down_some_iso () {
     #tftp_setup_pxe_iso "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-32.iso"
     #tftp_setup_pxe_iso "http://archive-5.kali.org/kali-images/kali-linux-1.0.4-i386.iso"
     #tftp_setup_pxe_iso "http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso"
+
+    #tftp_setup_pxe_iso "http://ftp.ticklers.org/releases.ubuntu.org/releases//raring/ubuntu-13.04-desktop-i386.iso"
+    #tftp_setup_pxe_iso "http://gb.releases.ubuntu.com//raring/ubuntu-13.04-desktop-amd64.iso"
 }
 
 echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
@@ -1550,3 +1677,5 @@ process_file_list "" < "${FN_TMP_LIST}"
 
 #rm -f "${FN_TMP_LIST}"
 echo "Done!" >> "/dev/stderr"
+
+cat "${FN_TMP_LASTMSG}" >> "/dev/stderr"
