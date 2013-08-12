@@ -22,15 +22,15 @@ fi
 
 FN_TMP_LASTMSG="/tmp/pxelinuxiso-lastmsg"
 # the iso file list saved from arguments
-FN_TMP_LIST="/tmp/tftp-iso-file-list"
+FN_TMP_LIST="/tmp/pxelinuxiso-iso-file-list"
 
 export TFTP_ROOT=/var/lib/tftpboot
 export DIST_NFSIP=192.168.0.1
 
 ############################################################
 # detect the linux distribution
-FN_AWK_DET_ISO="/tmp/detlinuxiso.awk"
-FN_AWK_DET_URL="/tmp/detlinuxurl.awk"
+FN_AWK_DET_ISO="/tmp/pxelinuxiso-detlinuxiso.awk"
+FN_AWK_DET_URL="/tmp/pxelinuxiso-detlinuxurl.awk"
 
 gen_detect_iso_script () {
 cat << EOF > "${FN_AWK_DET_ISO}"
@@ -73,27 +73,27 @@ BEGIN {
         case "BT5":
             dist_name = "backtrack";
             dist_release = 5;
-            dist_type="net";
+            dist_type="live";
             break;
         case "BT5R1":
             dist_name = "backtrack";
             dist_release = "5r1";
-            dist_type="net";
+            dist_type="live";
             break;
         case "BT5R2":
             dist_name = "backtrack";
             dist_release = "5r2";
-            dist_type="net";
+            dist_type="live";
             break;
         case "BT5R3":
             dist_name = "backtrack";
             dist_release = "5r3";
-            dist_type="net";
+            dist_type="live";
             break;
         case "bt4":
             dist_name = "backtrack";
             dist_release = "4";
-            dist_type="net";
+            dist_type="oldlive";
             dist_arch = "i386";
             break;
 
@@ -344,27 +344,27 @@ BEGIN {
         case "BT5":
             dist_name = "backtrack";
             dist_release = 5;
-            dist_type="net";
+            dist_type="live";
             break;
         case "BT5R1":
             dist_name = "backtrack";
             dist_release = "5r1";
-            dist_type="net";
+            dist_type="live";
             break;
         case "BT5R2":
             dist_name = "backtrack";
             dist_release = "5r2";
-            dist_type="net";
+            dist_type="live";
             break;
         case "BT5R3":
             dist_name = "backtrack";
             dist_release = "5r3";
-            dist_type="net";
+            dist_type="live";
             break;
         case "bt4":
             dist_name = "backtrack";
             dist_release = "4";
-            dist_type="net";
+            dist_type="oldlive";
             dist_arch = "i386";
             break;
 
@@ -599,18 +599,18 @@ detect_linux_dist () {
     #URL2BASE=$(dirname "${PARAM_URL2}")
 
     gen_detect_iso_script
-    echo "${FN_SINGLE}" | awk -v FNOUT=/tmp/tftp-out-iso -f "${FN_AWK_DET_ISO}"
-    _detect_export_values "/tmp/tftp-out-iso"
+    echo "${FN_SINGLE}" | awk -v FNOUT=/tmp/pxelinuxiso-out-iso -f "${FN_AWK_DET_ISO}"
+    _detect_export_values "/tmp/pxelinuxiso-out-iso"
     if [ "${DECLNXOUT_NAME}" = "" ]; then
         gen_detect_url_script
-        echo "${PARAM_URL2}" | awk -v FNOUT=/tmp/tftp-out-url -f "${FN_AWK_DET_URL}"
-        _detect_export_values "/tmp/tftp-out-url"
+        echo "${PARAM_URL2}" | awk -v FNOUT=/tmp/pxelinuxiso-out-url -f "${FN_AWK_DET_URL}"
+        _detect_export_values "/tmp/pxelinuxiso-out-url"
     fi
 }
 ############################################################
 
-FN_MD5TMP=md5sumalltmp
-FN_SHA1TMP=sha1sumalltmp
+FN_MD5TMP="/tmp/pxelinuxiso-md5sumall"
+FN_SHA1TMP="/tmp/pxelinuxiso-sha1sumall"
 
 check_xxxsum () {
     # sumname is MD5SUM or SHA1SUM
@@ -655,20 +655,27 @@ check_xxxsum () {
         touch "${FN}"
     fi
     MD5SUM_REMOTE=
-    rm -f "/tmp/md5tmp"
-    wget $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "/tmp/md5tmp"
+    rm -f "/tmp/pxelinuxiso-md5tmp"
+    wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "/tmp/pxelinuxiso-md5tmp"
     if [ ! "$?" = "0" ]; then
-        rm -f "/tmp/md5tmp"
-        FN_BASE1=`echo "${FN_SINGLE}" | ${EXEC_AWK} -F. '{b=$1; for (i=2; i < NF; i ++) {b=b "." $(i)}; print b}'`
-        wget $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "/tmp/md5tmp"
+        rm -f "/tmp/pxelinuxiso-md5tmp"
+        FN_BASE1=$(echo "${PARAM_SUMNAME}" | tr '[A-Z]' '[a-z]')
+        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "/tmp/pxelinuxiso-md5tmp"
         if [ ! "$?" = "0" ]; then
-            rm -f "/tmp/md5tmp"
+            rm -f "/tmp/pxelinuxiso-md5tmp"
         fi
     fi
-    if [ -f "/tmp/md5tmp" ]; then
-        echo "[DBG] chk file /tmp/md5tmp" >> "/dev/stderr"
-        echo "[DBG] grep -i ${FN_SINGLE} /tmp/md5tmp | awk '{print $1}'" >> "/dev/stderr"
-        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "/tmp/md5tmp" | awk '{print $1}')
+    if [ ! -f "/tmp/pxelinuxiso-md5tmp" ]; then
+        FN_BASE1=$(basename "${FN_SINGLE}" | ${EXEC_AWK} -F. '{b=$1; for (i=2; i < NF; i ++) {b=b "." $(i)}; print b}')
+        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "/tmp/pxelinuxiso-md5tmp"
+        if [ ! "$?" = "0" ]; then
+            rm -f "/tmp/pxelinuxiso-md5tmp"
+        fi
+    fi
+    if [ -f "/tmp/pxelinuxiso-md5tmp" ]; then
+        echo "[DBG] chk file /tmp/pxelinuxiso-md5tmp" >> "/dev/stderr"
+        echo "[DBG] grep -i ${FN_SINGLE} /tmp/pxelinuxiso-md5tmp | awk '{print $1}'" >> "/dev/stderr"
+        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "/tmp/pxelinuxiso-md5tmp" | awk '{print $1}')
         echo "[DBG] MD5SUM_REMOTE=$MD5SUM_REMOTE" >> "/dev/stderr"
         echo "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM" >> "/dev/stderr"
         if [ ! "${MD5SUM_REMOTE}" = "" ]; then
@@ -744,8 +751,16 @@ down_url () {
     MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
     FLG_DOWN=$(  check_xxxsum MD5SUMS md5sum "${MD5SUM_STATIC}" "${PARAM_RENAME}" )
     if [ "${FLG_DOWN}" = "1" ]; then
+        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
+        FLG_DOWN=$(  check_xxxsum MD5SUM md5sum "${MD5SUM_STATIC}" "${PARAM_RENAME}" )
+    fi
+    if [ "${FLG_DOWN}" = "1" ]; then
         MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | awk '{print $1}')
         FLG_DOWN=$(  check_xxxsum SHA1SUMS sha1sum "${MD5SUM_STATIC}" "${PARAM_RENAME}"  )
+    fi
+    if [ "${FLG_DOWN}" = "1" ]; then
+        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | awk '{print $1}')
+        FLG_DOWN=$(  check_xxxsum SHA1SUM sha1sum "${MD5SUM_STATIC}" "${PARAM_RENAME}"  )
     fi
 
     if [ "${FLG_DOWN}" = "1" ]; then
@@ -758,13 +773,13 @@ down_url () {
         echo "[DBG] " download_file "${DN_SRCS}" "${MD5SUM_DW}" "${FN_SINGLE}" "${PARAM_URL0}" >> "/dev/stderr"
         RET=0
         $MYEXEC rm -f "${DN_SRCS}/${FN_SINGLE}"
-        $MYEXEC wget -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
+        $MYEXEC wget --no-check-certificate -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
         RET=$?
         if [ ${RET} = 0 ]; then
-            md5sum  "${DN_SRCS}/${FN_SINGLE}" > /tmp/md5sum-down
-            $MYEXEC attach_to_file /tmp/md5sum-down "${DN_SRCS}/MD5SUMS"
-            sha1sum "${DN_SRCS}/${FN_SINGLE}" > /tmp/sha1sum-down
-            $MYEXEC attach_to_file /tmp/sha1sum-down "${DN_SRCS}/SHA1SUMS"
+            md5sum  "${DN_SRCS}/${FN_SINGLE}" > /tmp/pxelinuxiso-md5sum-down
+            $MYEXEC attach_to_file /tmp/pxelinuxiso-md5sum-down "${DN_SRCS}/MD5SUMS"
+            sha1sum "${DN_SRCS}/${FN_SINGLE}" > /tmp/pxelinuxiso-sha1sum-down
+            $MYEXEC attach_to_file /tmp/pxelinuxiso-sha1sum-down "${DN_SRCS}/SHA1SUMS"
         else
             echo "[ERR] download file ${PARAM_URL0} error!" >> "/dev/stderr"
             echo "[DBG] exit 0" >> "/dev/stderr"
@@ -800,6 +815,9 @@ tftp_init_directories () {
 }
 
 tftp_init_service () {
+    echo "[DBG] Install TFTP/NFS/DHCP servers ..."
+    install_package tftpd-hpa syslinux nfs-kernel-server dhcp3-server bind9
+
     tftp_init_directories
     $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
 
@@ -834,7 +852,7 @@ tftp_init_service () {
     $MYEXEC cd -
 
     # set the header of configuration file
-    cat > /tmp/tmptftpdefault << EOF
+    cat > /tmp/pxelinuxiso-tftpdefault << EOF
 #PROMPT 1
 #TIMEOUT 0
 #DISPLAY pxelinux.cfg/boot.txt
@@ -853,238 +871,19 @@ LABEL local
         LOCALBOOT 0
 
 EOF
-    $MYEXEC cp /tmp/tmptftpdefault ${TFTP_ROOT}/netboot/pxelinux.cfg/default
+    $MYEXEC cp /tmp/pxelinuxiso-tftpdefault ${TFTP_ROOT}/netboot/pxelinux.cfg/default
 
-    cat > /tmp/tmptftpboot << EOF
+    cat > /tmp/pxelinuxiso-tftpboot << EOF
 Available Boot Options:
 =======================
 EOF
-    $MYEXEC cp /tmp/tmptftpboot ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    $MYEXEC cp /tmp/pxelinuxiso-tftpboot ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
 }
 
-#####################################################################
-# start of script
-# read the arguments of commandline
-#
-
-usage () {
-    PARAM_NAME="$1"
-
-    echo "${PARAM_NAME} v0.1" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Prepare the TFTP root directory for Linux distributions' ISO files" >> "/dev/stderr"
-    echo "So you can boot the installation CD/DVD from network(PXE)" >> "/dev/stderr"
-    echo "Written by yhfudev(yhfudev@gmail.com), 2013-07" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "${PARAM_NAME} [options] <url>" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Options:" >> "/dev/stderr"
-    echo "  --help            Print this message" >> "/dev/stderr"
-    echo "  --init            Init TFTP directory environment" >> "/dev/stderr"
-    echo "  --tftproot <DIR>  set the tftp root folder, default: ${TFTP_ROOT}" >> "/dev/stderr"
-    echo "  --nfsip <IP>      set NFS server IP, default: ${DIST_NFSIP}" >> "/dev/stderr"
-    echo "  --title <NAME>    set the boot title" >> "/dev/stderr"
-    echo "  --nonpae          add non-PAE for old machine" >> "/dev/stderr"
-
-    echo "  --distname <NAME> set the OS type of ISO, such as centos, ubuntu, arch" >> "/dev/stderr"
-    echo "  --distarch <NAME> set the arch of the OS, such as amd64, x86_64, i386, i686" >> "/dev/stderr"
-    echo "  --distrelease <NAME> set the distribution release, such as quantal,raring" >> "/dev/stderr"
-    echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." >> "/dev/stderr"
-
-    echo "  --nointeractive|-n  no interative" >> "/dev/stderr"
-    echo "  --simulate|-s       not do the real work, just show the info" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Features" >> "/dev/stderr"
-    echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" >> "/dev/stderr"
-    echo "  2. Can be run in CentOS/Ubuntu" >> "/dev/stderr"
-    echo "  2. Support CD/DVDs of Fedora/CentOS/Debian/Ubuntu/Mint/Kali/..." >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Prerequisites" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  1. Installed NFS server. This script will append lines to file /etc/exports;" >> "/dev/stderr"
-    echo "  2. Installed TFTP server. This script will append lines to file" >> "/dev/stderr"
-    echo "     /var/lib/tftpboot/netboot/pxelinux.cfg/default;" >> "/dev/stderr"
-    echo "  3. To mount ISO files as loop device, a line will also be appended to /etc/fstab;" >> "/dev/stderr"
-    echo "  4. Installed syslinux;" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Installation" >> "/dev/stderr"
-    echo "  Download the source files from GIT repo" >> "/dev/stderr"
-    echo "    git clone https://code.google.com/p/pxe-linux-iso/" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Initialize directories" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  This script use following tree structure to manage the ISO files:" >> "/dev/stderr"
-    echo "    /var/lib/tftpboot/" >> "/dev/stderr"
-    echo "      |-- downloads          # the downloaded CD/DVD ISO files and patches" >> "/dev/stderr"
-    echo "      |-- images-desktop     # mount points for Linux desktop distributions" >> "/dev/stderr"
-    echo "      |-- images-server      # mount points for Linux server distributions" >> "/dev/stderr"
-    echo "      |-- images-net         # mount points for netinstall" >> "/dev/stderr"
-    echo "      |-- netboot            # (tftp default directory)" >> "/dev/stderr"
-    echo "          |-- downloads      # symbol link" >> "/dev/stderr"
-    echo "          |-- images-desktop # symbol link" >> "/dev/stderr"
-    echo "          |-- images-server  # symbol link" >> "/dev/stderr"
-    echo "          |-- images-net     # symbol link" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  The following files also be initialized with default headers:" >> "/dev/stderr"
-    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/default" >> "/dev/stderr"
-    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Examples" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  0. Help!" >> "/dev/stderr"
-    echo "    ${PARAM_NAME} --help" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  1. Initialize directories" >> "/dev/stderr"
-    echo "    sudo ${PARAM_NAME} --init" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  2. Add entries to the PXE server" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "    2.1 Add Ubuntu mini" >> "/dev/stderr"
-    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "    2.2 Add Kali" >> "/dev/stderr"
-    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-}
-
-rm -f "${FN_TMP_LIST}"
-rm -f "${FN_TMP_LASTMSG}"
-touch "${FN_TMP_LASTMSG}"
-
-# init tftp directory?
-FLG_INIT_TFTPROOT=0
-# add non-PAE installation (for Ubuntu)
-FLG_NON_PAE=0
-# ask user for choices?
-FLG_NOINTERACTIVE=0
-# simulate
-FLG_SIMULATE=0
-FN_FULL=""
-TITLE_BOOT=""
-A_DIST_NAME=""
-A_DIST_RELEASE=""
-A_DIST_ARCH=""
-A_DIST_TYPE=""
-while [ ! "$1" = "" ]; do
-    case "$1" in
-    --help|-h)
-        usage "$0"
-        exit 0
-        ;;
-    --init)
-        FLG_INIT_TFTPROOT=1
-        ;;
-    --tftproot)
-        shift
-        export TFTP_ROOT="$1"
-        ;;
-    --nfsip)
-        shift
-        export DIST_NFSIP="$1"
-        ;;
-    --title)
-        shift
-        TITLE_BOOT="$1"
-        ;;
-    --distname)
-        shift
-        A_DIST_NAME="$1"
-        ;;
-    --distarch)
-        shift
-        A_DIST_ARCH="$1"
-        ;;
-    --distrelease)
-        shift
-        A_DIST_RELEASE="$1"
-        ;;
-    --disttype)
-        shift
-        A_DIST_TYPE="$1"
-        ;;
-    --nointeractive|-n)
-        FLG_NOINTERACTIVE=1
-        ;;
-    --simulate|-s)
-        FLG_SIMULATE=1
-        ;;
-    --nonpae|--nopae)
-        FLG_NON_PAE=1
-        ;;
-    -*)
-        echo "Use option --help to get the usages." >> "/dev/stderr"
-        exit 1
-        ;;
-    *)
-        echo "$1" >> "${FN_TMP_LIST}"
-        FN_FULL="${FN_FULL} $1"
-        break;
-        ;;
-    esac
-    shift
-done
-
-echo "[DBG] FN_FULL=$FN_FULL" >> "/dev/stderr"
-
-if [ "${FN_FULL}" = "" ]; then
-    usage "$0"
-    exit 1
-fi
-
-# attach the content of a file to the end of another file.
-attach_to_file () {
-    if [ -f "$1" ]; then
-        cat "$1" >> "$2"
-    fi
-}
-
-myexec_ignore () {
-    echo "[DBG] (skip) $*"
-}
-MYEXEC=
-if [ $FLG_SIMULATE = 1 ]; then
-    MYEXEC=myexec_ignore
-fi
-
-install_package wget coreutils
-
-tftp_init_directories
-if [ "${FLG_INIT_TFTPROOT}" = "1" ]; then
-    tftp_init_service
-fi
-
-cat << EOF > ${FN_MD5TMP}
-0c5fab6fff4c431a8827754f0b3bc13f  archlinux-2013.07.01-dual.iso
-af139d2a085978618dc53cabc67b9269  bt4-final.iso
-d324687fb891e695089745d461268576  BT5R3-KDE-32.iso
-981b897b7fdf34fb1431ba84fe93249f  BT5R3-KDE-64.iso
-afb8c6192a2e1d1ba0fa3db9c531be6d  pentoo-i686-2013.0_RC1.8.iso
-9ed0286a23eeae77be6fd9b952c5f62c  initrd-kali-1.0.3-3.7-trunk-686-pae.img
-a6aaec29dad544d9d3c86d3bf63d7486  initrd-kali-1.0.4-3.7-trunk-686-pae.img
-a5bd239b9017943e0e4598ece7e7e85f  initrd-kali-1.0.4-3.7-trunk-amd64.img
-
-c187e39bdb6e09283a8976caadd756b6  linux-headers-3.8.0-19_3.8.0-19.30_all.deb
-037f96bdbfef9c587289c58532e40f47  linux-headers-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
-a7ef8da234153e7c8daba0f82f282df8  linux-image-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
-0f707986757bd93a4f0efb9b521aca38  initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz
-d3374a10f71468978428a383c3267aae  vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386
-
-EOF
-
-cat << EOF > ${FN_SHA1TMP}
-bb074cad7b6d8e09f936ee7c922a30362d8d7940  kali-linux-1.0-amd64-mini.iso
-f1c1dbce42d88bae4ed5683655701e5847e23246  kali-linux-1.0-i386-mini.iso
-95a0eab94407d7ebf0ec6fbd189d883aa772d21d  kali-linux-1.0.3-amd64.iso
-54af51b9f4bf3d77ecd45e548de308837c546b12  kali-linux-1.0.3-i386.iso
-fed4ae5157237c57d7815e475f7a9ddc38a13208  kali-linux-1.0.4-amd64-mini.iso
-bb14f4e1fc0656a14615e40d727f6c49e8202d38  kali-linux-1.0.4-amd64.iso
-01324e8486f16d7d754e1602b9afe135f5e98c8a  kali-linux-1.0.4-i386-mini.iso
-68b91a8894709cc132ab7cd9eca57513e1ce478b  kali-linux-1.0.4-i386.iso
-EOF
-
-FN_TMP_ETCEXPORTS="/tmp/etcexports"
-FN_TMP_ETCFSTAB="/tmp/etcfstab"
-FN_TMP_TFTPMENU="/tmp/tftpmenu"
+FN_TMP_ETCEXPORTS="/tmp/pxelinuxiso-etcexports"
+FN_TMP_ETCFSTAB="/tmp/pxelinuxiso-etcfstab"
+FN_TMP_TFTPMENU="/tmp/pxelinuxiso-tftpmenu"
+FN_TMP_ETCRCLOCAL="/tmp/pxelinuxiso-etc.rc.local"
 
 tftp_setup_pxe_iso () {
     PARAM_URL1="$1"
@@ -1251,17 +1050,48 @@ tftp_setup_pxe_iso () {
     "ubuntu")
         echo "[DBG] dist ubuntu" >> "/dev/stderr"
         case "$DIST_TYPE" in
-        "server")
-            # server, alternate
+        "server") # server, alternate
             echo "[DBG] type server" >> "/dev/stderr"
             FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz"
             TFTP_APPEND_NFS=""
-            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux"
+            if [ "${FLG_NON_PAE}" = "1" ]; then
+
+#TFTP_ROOT="/home/yhfu/homegw/var/lib/tftpboot"
+#DIST_MOUNTPOINT="images-server/ubuntu/13.04/i386"
+#URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.8.019wtnonpa-20130429091312-e20cgo6obhlyk3fi-1/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz"
+
+#cp "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/i386/initrd.gz" cd-initrd.gz
+#cp "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})" url-initrd.lz
+
+#mkdir cd
+#cd cd
+#gzip -dc ../cd-initrd.gz | cpio -id
+#cd ..
+
+#mkdir url
+#cd url
+#lzma -dc -S .lz ../url-initrd.lz | cpio -id
+#cd ..
+
+#cp -rp url/lib/modules/  cd/lib/
+#cp -rp url/lib/firmware/ cd/lib/
+
+#cd cd
+#find . | cpio --quiet --dereference -o -H newc | gzip -9 > ../new-initrd.gz
+## find . | cpio --quiet --dereference -o -H newc | lzma -7 > ../new-initrd.lz
+#cd ..
+
+
+                URL_INITRD="http://192.168.2.9/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.gz"
+                URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.8.019wtnonp-20130429091312-e20cgo6obhlyk3fi-5/vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386"
+                TFTP_KERNEL="KERNEL downloads/$(basename ${URL_VMLINUZ})"
+                TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
+            fi
             ;;
 
-        "desktop")
+        "server"|"desktop")
             # desktop, live?
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
@@ -1272,10 +1102,10 @@ tftp_setup_pxe_iso () {
             if [ "${FLG_NON_PAE}" = "1" ]; then
               URL_VMLINUZ=
               if [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 11) print 1; else print 0; }') = 1 ]; then
-                echo "Ubuntu 10 or lower support non-PAE. No need to use special steps"
-              elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 12) print 1; else print 0; }') = 1 ]; then
-                # version 11.x
-                echo ""
+                echo "Ubuntu 10 or lower support non-PAE. No need to use special steps" >> "${FN_TMP_LASTMSG}"
+              #elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 12) print 1; else print 0; }') = 1 ]; then
+                ## version 11.x
+                #echo ""
               elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 13) print 1; else print 0; }') = 1 ]; then
                 # version 12.x
                 URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.5.017wtnonp-20121104150059-2ifucieir3hr7d7r-1/vmlinuz-3.5.0-17-wt-non-pae_3.5.0-17.28_i386"
@@ -1303,14 +1133,14 @@ tftp_setup_pxe_iso () {
                 #$MYEXEC down_url "${URL_PKG1}"
                 #$MYEXEC down_url "${URL_PKG2}"
                 #$MYEXEC down_url "${URL_PKG3}"
-                $MYEXEC wget -c "${URL_INITRD}"  -O "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
-                $MYEXEC wget -c "${URL_VMLINUZ}" -O "${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
-                $MYEXEC wget -c "${URL_PKG1}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
-                $MYEXEC wget -c "${URL_PKG2}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
-                $MYEXEC wget -c "${URL_PKG3}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
+                $MYEXEC wget --no-check-certificate -c "${URL_INITRD}"  -O "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
+                $MYEXEC wget --no-check-certificate -c "${URL_VMLINUZ}" -O "${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
+                $MYEXEC wget --no-check-certificate -c "${URL_PKG1}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
+                $MYEXEC wget --no-check-certificate -c "${URL_PKG2}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
+                $MYEXEC wget --no-check-certificate -c "${URL_PKG3}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
 
                 TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
-                TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
+                #TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
                 TFTP_KERNEL="KERNEL downloads/$(basename ${URL_VMLINUZ})"
                 TFTP_MENU_LABEL="${TFTP_MENU_LABEL} non-PAE"
                 TFTP_TAG_LABEL="${TFTP_TAG_LABEL}_nonpae"
@@ -1318,13 +1148,13 @@ tftp_setup_pxe_iso () {
                 FN_KS="ks-${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-nonpae.ks"
                 cat << EOF > "${TFTP_ROOT}/kickstarts/${FN_KS}"
 %post
-#wget "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG1})"
-#wget "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG2})"
-#wget "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG3})"
+#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG1})"
+#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG2})"
+#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG3})"
 
-wget "${URL_PKG1}"
-wget "${URL_PKG2}"
-wget "${URL_PKG3}"
+wget --no-check-certificate "${URL_PKG1}"
+wget --no-check-certificate "${URL_PKG2}"
+wget --no-check-certificate "${URL_PKG3}"
 
 dpkg --root=/target -i $(basename ${URL_PKG1})
 dpkg --root=/target -i $(basename ${URL_PKG2})
@@ -1332,14 +1162,15 @@ dpkg --root=/target -i $(basename ${URL_PKG3})
 %end
 EOF
                 TFTP_APPEND_OTHER="ks=http://${DIST_NFSIP}/kickstarts/${FN_KS} ${TFTP_APPEND_OTHER}"
-echo "You may want to install non-PAE Linux kernel before the system reboots:" >> "${FN_TMP_LASTMSG}"
-echo "  (press ALT+CTRL+F1 to switch to the console)" >> "${FN_TMP_LASTMSG}"
-echo "    wget '${URL_PKG1}'" >> "${FN_TMP_LASTMSG}"
-echo "    wget '${URL_PKG2}'" >> "${FN_TMP_LASTMSG}"
-echo "    wget '${URL_PKG3}'" >> "${FN_TMP_LASTMSG}"
-echo "    dpkg --root=/target -i $(basename ${URL_PKG1})" >> "${FN_TMP_LASTMSG}"
-echo "    dpkg --root=/target -i $(basename ${URL_PKG2})" >> "${FN_TMP_LASTMSG}"
-echo "    dpkg --root=/target -i $(basename ${URL_PKG3})" >> "${FN_TMP_LASTMSG}"
+                echo "You may want to install non-PAE Linux kernel before the system reboots:" >> "${FN_TMP_LASTMSG}"
+                echo "  (press ALT+CTRL+F1 to switch to the console)" >> "${FN_TMP_LASTMSG}"
+                echo "    wget '${URL_PKG1}'" >> "${FN_TMP_LASTMSG}"
+                echo "    wget '${URL_PKG2}'" >> "${FN_TMP_LASTMSG}"
+                echo "    wget '${URL_PKG3}'" >> "${FN_TMP_LASTMSG}"
+                echo "    dpkg --root=/target -i $(basename ${URL_PKG1})" >> "${FN_TMP_LASTMSG}"
+                echo "    dpkg --root=/target -i $(basename ${URL_PKG2})" >> "${FN_TMP_LASTMSG}"
+                echo "    dpkg --root=/target -i $(basename ${URL_PKG3})" >> "${FN_TMP_LASTMSG}"
+                FLG_NON_PAE_PROCESSED=1
 
               fi
             fi
@@ -1438,6 +1269,22 @@ echo "    dpkg --root=/target -i $(basename ${URL_PKG3})" >> "${FN_TMP_LASTMSG}"
                 $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
                 $MYEXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
                 TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
+                if [ "${FLG_NON_PAE}" = "1" ]; then
+                    echo "Not support Kali non-PAE kernel at present," >> "${FN_TMP_LASTMSG}"
+                    echo "You may ask the author to add it in, or" >> "${FN_TMP_LASTMSG}"
+                    echo "you want to read this to compile kernel by yourself:" >> "${FN_TMP_LASTMSG}"
+                    echo "http://docs.kali.org/pdf/kali-book-en.pdf" >> "${FN_TMP_LASTMSG}"
+                    echo "http://samiux.blogspot.com/2013/03/howto-rebuild-kali-linux-101.html" >> "${FN_TMP_LASTMSG}"
+
+#apt-get install git live-build cdebootstrap kali-archive-keyring
+#git clone git://git.kali.org/live-build-config.git
+#cd live-build-config
+#sed -i 's/686-pae/486/g' auto/config
+#lb clean
+#lb config --architecture i386
+#lb build
+
+                fi
                 ;;
             esac
             ;;
@@ -1521,7 +1368,8 @@ EOF
             TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
             TFTP_APPEND_OTHER=""
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+            TFTP_MENU_LABEL="${TFTP_MENU_LABEL} (x86_64)"
         ;;
     *)
         echo "[ERR] Not supported distribution: ${DIST_NAME}" >> "/dev/stderr"
@@ -1537,7 +1385,7 @@ LABEL ${TFTP_TAG_LABEL}
     ${TFTP_APPEND}
 EOF
 
-    echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+    echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 noauto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
     if [ "${FLG_NFS}" = "1" ]; then
         echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
     fi
@@ -1578,6 +1426,8 @@ EOF
     # download and check the file
     $MYEXEC down_url "${DIST_URL}" "${DIST_FILE}"
 
+    DN_PXEBACKUP="/etc/pxelinuxisobak/"
+    mkdir -p "${DN_PXEBACKUP}"
     # -- ISO file mount point: /etc/fstab
     $MYEXEC mkdir -p "${TFTP_ROOT}/${DIST_MOUNTPOINT}/"
     $MYEXEC umount "${DIST_FILE}"
@@ -1597,23 +1447,38 @@ EOF
     RET=$?
     if [ ! "$RET" = "0" ]; then
         # backup the old fstab
-        echo "[INFO] the old /etc/fstab saved to /etc/fstab-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-        $MYEXEC cp /etc/fstab /etc/fstab-$(date "+%Y%m%d-%H%M%S")
+        echo "[INFO] the old /etc/fstab saved to ${DN_PXEBACKUP}/fstab-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
+        $MYEXEC cp /etc/fstab "${DN_PXEBACKUP}/fstab-$(date +%Y%m%d-%H%M%S)"
         # update the fatab
         $MYEXEC mv /tmp/aaa /etc/fstab
     fi
-    $MYEXEC attach_to_file "${FN_TMP_ETCFSTAB}" /etc/fstab
-    $MYEXEC mount -a
+    $MYEXEC attach_to_file "${FN_TMP_ETCFSTAB}"   /etc/fstab
+
+    echo "mount ${TFTP_ROOT}/${DIST_MOUNTPOINT}" > "${FN_TMP_ETCRCLOCAL}"
+    grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/rc.local > /tmp/aaa
+    diff -Nbu /etc/rc.local /tmp/aaa
+    RET=$?
+    if [ ! "$RET" = "0" ]; then
+        # backup the old rc.local
+        echo "[INFO] the old /etc/rc.local saved to ${DN_PXEBACKUP}/rc.local-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
+        $MYEXEC cp /etc/rc.local "${DN_PXEBACKUP}/rc.local-$(date +%Y%m%d-%H%M%S)"
+        # update the rc.local
+        $MYEXEC mv /tmp/aaa /etc/rc.local
+    fi
+    $MYEXEC attach_to_file "${FN_TMP_ETCRCLOCAL}" /etc/rc.local
+    #$MYEXEC mount -a
+    #chmod 755 "${FN_TMP_ETCRCLOCAL}"
+    . "${FN_TMP_ETCRCLOCAL}"
 
     # -- NFS
     if [ "${FLG_NFS}" = "1" ]; then
         if [ ! "${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
             grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/exports > /tmp/aaa
             # backup the old exports
-            echo "[INFO] the old /etc/exports saved to /etc/exports-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-            $MYEXEC cp /etc/exports /etc/exports-$(date "+%Y%m%d-%H%M%S")
+            echo "[INFO] the old /etc/exports saved to ${DN_PXEBACKUP}/exports-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
+            $MYEXEC cp /etc/exports "${DN_PXEBACKUP}/exports-$(date +%Y%m%d-%H%M%S)"
             # update exports
-            $MYEXEC mv /tmp/aaa /etc/exports
+            $MYEXEC cp /tmp/aaa /etc/exports
         fi
         $MYEXEC attach_to_file "${FN_TMP_ETCEXPORTS}" /etc/exports
         $MYEXEC sudo service nfs-kernel-server restart # Debian/Ubuntu
@@ -1656,6 +1521,248 @@ process_file_list () {
     done
 }
 
+#####################################################################
+# start of script
+# read the arguments of commandline
+#
+
+usage () {
+    PARAM_NAME="$1"
+
+    echo "${PARAM_NAME} v0.1" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Prepare the TFTP root directory for Linux distributions' ISO files" >> "/dev/stderr"
+    echo "So you can boot the installation CD/DVD from network(PXE)" >> "/dev/stderr"
+    echo "Written by yhfudev(yhfudev@gmail.com), 2013-07" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "${PARAM_NAME} [options] <url>" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Options:" >> "/dev/stderr"
+    echo "  --help            Print this message" >> "/dev/stderr"
+    echo "  --init            Init TFTP directory environment" >> "/dev/stderr"
+    echo "  --tftproot <DIR>  set the tftp root folder, default: ${TFTP_ROOT}" >> "/dev/stderr"
+    echo "  --nfsip <IP>      set NFS server IP, default: ${DIST_NFSIP}" >> "/dev/stderr"
+    echo "  --title <NAME>    set the boot title" >> "/dev/stderr"
+    echo "  --nonpae          add non-PAE for old machine" >> "/dev/stderr"
+
+    echo "  --distname <NAME> set the OS type of ISO, such as centos, ubuntu, arch" >> "/dev/stderr"
+    echo "  --distarch <NAME> set the arch of the OS, such as amd64, x86_64, i386, i686" >> "/dev/stderr"
+    echo "  --distrelease <NAME> set the distribution release, such as quantal,raring" >> "/dev/stderr"
+    echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." >> "/dev/stderr"
+
+    echo "  --nointeractive|-n  no interative" >> "/dev/stderr"
+    echo "  --simulate|-s       not do the real work, just show the info" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Features" >> "/dev/stderr"
+    echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" >> "/dev/stderr"
+    echo "  2. Can be run in CentOS/Ubuntu" >> "/dev/stderr"
+    echo "  2. Support CD/DVDs of Fedora/CentOS/Debian/Ubuntu/Mint/Kali/..." >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Prerequisites" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  1. Installed NFS server. This script will append lines to file /etc/exports;" >> "/dev/stderr"
+    echo "  2. Installed TFTP server. This script will append lines to file" >> "/dev/stderr"
+    echo "     /var/lib/tftpboot/netboot/pxelinux.cfg/default;" >> "/dev/stderr"
+    echo "  3. To mount ISO files as loop device, a line will also be appended to /etc/fstab, and" >> "/dev/stderr"
+    echo "     /etc/rc.local;" >> "/dev/stderr"
+    echo "  4. Installed syslinux;" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Installation" >> "/dev/stderr"
+    echo "  Download the source files from GIT repo" >> "/dev/stderr"
+    echo "    git clone https://code.google.com/p/pxe-linux-iso/" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Initialize directories" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  This script use following tree structure to manage the ISO files:" >> "/dev/stderr"
+    echo "    /var/lib/tftpboot/" >> "/dev/stderr"
+    echo "      |-- downloads          # the downloaded CD/DVD ISO files and patches" >> "/dev/stderr"
+    echo "      |-- images-desktop     # mount points for Linux desktop distributions" >> "/dev/stderr"
+    echo "      |-- images-server      # mount points for Linux server distributions" >> "/dev/stderr"
+    echo "      |-- images-net         # mount points for netinstall" >> "/dev/stderr"
+    echo "      |-- netboot            # (tftp default directory)" >> "/dev/stderr"
+    echo "          |-- downloads      # symbol link" >> "/dev/stderr"
+    echo "          |-- images-desktop # symbol link" >> "/dev/stderr"
+    echo "          |-- images-server  # symbol link" >> "/dev/stderr"
+    echo "          |-- images-net     # symbol link" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  The following files also be initialized with default headers:" >> "/dev/stderr"
+    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/default" >> "/dev/stderr"
+    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "Examples" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  0. Help!" >> "/dev/stderr"
+    echo "    ${PARAM_NAME} --help" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  1. Initialize directories" >> "/dev/stderr"
+    echo "    sudo ${PARAM_NAME} --init" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "  2. Add entries to the PXE server" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "    2.1 Add Ubuntu mini" >> "/dev/stderr"
+    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+    echo "    2.2 Add Kali" >> "/dev/stderr"
+    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'" >> "/dev/stderr"
+    echo "" >> "/dev/stderr"
+}
+
+rm -f "${FN_TMP_LIST}"
+rm -f "${FN_TMP_LASTMSG}"
+touch "${FN_TMP_LASTMSG}"
+
+# init tftp directory?
+FLG_INIT_TFTPROOT=0
+# add non-PAE installation (for Ubuntu)
+FLG_NON_PAE=0
+FLG_NON_PAE_PROCESSED=0
+# ask user for choices?
+FLG_NOINTERACTIVE=0
+# simulate
+FLG_SIMULATE=0
+FN_FULL=""
+TITLE_BOOT=""
+A_DIST_NAME=""
+A_DIST_RELEASE=""
+A_DIST_ARCH=""
+A_DIST_TYPE=""
+while [ ! "$1" = "" ]; do
+    case "$1" in
+    --help|-h)
+        usage "$0"
+        exit 0
+        ;;
+    --init)
+        FLG_INIT_TFTPROOT=1
+        ;;
+    --tftproot)
+        shift
+        export TFTP_ROOT="$1"
+        ;;
+    --nfsip)
+        shift
+        export DIST_NFSIP="$1"
+        ;;
+    --title)
+        shift
+        TITLE_BOOT="$1"
+        ;;
+    --distname)
+        shift
+        A_DIST_NAME="$1"
+        ;;
+    --distarch)
+        shift
+        A_DIST_ARCH="$1"
+        ;;
+    --distrelease)
+        shift
+        A_DIST_RELEASE="$1"
+        ;;
+    --disttype)
+        shift
+        A_DIST_TYPE="$1"
+        ;;
+    --nointeractive|-n)
+        FLG_NOINTERACTIVE=1
+        ;;
+    --simulate|-s)
+        FLG_SIMULATE=1
+        ;;
+    --nonpae|--nopae)
+        FLG_NON_PAE=1
+        ;;
+    -*)
+        echo "Use option --help to get the usages." >> "/dev/stderr"
+        exit 1
+        ;;
+    *)
+        echo "$1" >> "${FN_TMP_LIST}"
+        FN_FULL="${FN_FULL} $1"
+        break;
+        ;;
+    esac
+    shift
+done
+
+echo "[DBG] FN_FULL=$FN_FULL" >> "/dev/stderr"
+echo "[DBG] FLG_NON_PAE=$FLG_NON_PAE" >> "/dev/stderr"
+
+# attach the content of a file to the end of another file.
+attach_to_file () {
+    if [ -f "$1" ]; then
+        cat "$1" >> "$2"
+    fi
+}
+
+myexec_ignore () {
+    echo "[DBG] (skip) $*"
+}
+MYEXEC=
+if [ $FLG_SIMULATE = 1 ]; then
+    MYEXEC=myexec_ignore
+fi
+
+echo "[DBG] Install basic software packages ..."
+install_package gawk wget coreutils
+
+tftp_init_directories
+if [ "${FLG_INIT_TFTPROOT}" = "1" ]; then
+    tftp_init_service
+fi
+
+#if [ "${FN_FULL}" = "" ]; then
+    #usage "$0"
+    #exit 1
+#fi
+
+cat << EOF > ${FN_MD5TMP}
+0c5fab6fff4c431a8827754f0b3bc13f  archlinux-2013.07.01-dual.iso
+af139d2a085978618dc53cabc67b9269  bt4-final.iso
+d324687fb891e695089745d461268576  BT5R3-KDE-32.iso
+981b897b7fdf34fb1431ba84fe93249f  BT5R3-KDE-64.iso
+afb8c6192a2e1d1ba0fa3db9c531be6d  pentoo-i686-2013.0_RC1.8.iso
+9ed0286a23eeae77be6fd9b952c5f62c  initrd-kali-1.0.3-3.7-trunk-686-pae.img
+a6aaec29dad544d9d3c86d3bf63d7486  initrd-kali-1.0.4-3.7-trunk-686-pae.img
+a5bd239b9017943e0e4598ece7e7e85f  initrd-kali-1.0.4-3.7-trunk-amd64.img
+
+73d595b804149fca9547ed94db8ff44f  ubuntu-13.04-server-i386.iso
+c187e39bdb6e09283a8976caadd756b6  linux-headers-3.8.0-19_3.8.0-19.30_all.deb
+037f96bdbfef9c587289c58532e40f47  linux-headers-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
+a7ef8da234153e7c8daba0f82f282df8  linux-image-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
+0f707986757bd93a4f0efb9b521aca38  initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz
+d3374a10f71468978428a383c3267aae  vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386
+
+4a5fa01c81cc300f4729136e28ebe600  CentOS-6.4-x86_64-minimal.iso
+EOF
+
+cat << EOF > ${FN_SHA1TMP}
+bb074cad7b6d8e09f936ee7c922a30362d8d7940  kali-linux-1.0-amd64-mini.iso
+f1c1dbce42d88bae4ed5683655701e5847e23246  kali-linux-1.0-i386-mini.iso
+95a0eab94407d7ebf0ec6fbd189d883aa772d21d  kali-linux-1.0.3-amd64.iso
+54af51b9f4bf3d77ecd45e548de308837c546b12  kali-linux-1.0.3-i386.iso
+fed4ae5157237c57d7815e475f7a9ddc38a13208  kali-linux-1.0.4-amd64-mini.iso
+bb14f4e1fc0656a14615e40d727f6c49e8202d38  kali-linux-1.0.4-amd64.iso
+01324e8486f16d7d754e1602b9afe135f5e98c8a  kali-linux-1.0.4-i386-mini.iso
+68b91a8894709cc132ab7cd9eca57513e1ce478b  kali-linux-1.0.4-i386.iso
+6232efa014d9c6798396b63152c4c9a08b279f5e  CentOS-6.4-x86_64-minimal.iso
+EOF
+
+echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
+if [ -f "${FN_TMP_LIST}" ]; then
+    process_file_list "" < "${FN_TMP_LIST}"
+fi
+
+#rm -f "${FN_TMP_LIST}"
+echo "Done!" >> "/dev/stderr"
+
+cat "${FN_TMP_LASTMSG}" >> "/dev/stderr"
+if [ "${FLG_NON_PAE}" = "1" ]; then
+    if [ "${FLG_NON_PAE_PROCESSED}" = "0" ]; then
+        echo "[ERR] Not porcess non-PAE option!"
+    fi
+fi
+
 test_down_some_iso () {
     down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-32.iso"
     #down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-64.iso"
@@ -1675,12 +1782,10 @@ test_down_some_iso () {
 
     #tftp_setup_pxe_iso "http://ftp.ticklers.org/releases.ubuntu.org/releases//raring/ubuntu-13.04-desktop-i386.iso"
     #tftp_setup_pxe_iso "http://gb.releases.ubuntu.com//raring/ubuntu-13.04-desktop-amd64.iso"
+    # http://www.archive.ubuntu.com/ubuntu/dists/precise/main/installer-i386/current/images/netboot/non-pae/mini.iso
+    #http://us.releases.ubuntu.com/raring/ubuntu-13.04-server-i386.iso
+
+    #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-LiveCD.iso
+    #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-minimal.iso
+    #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-netinstall.iso
 }
-
-echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
-process_file_list "" < "${FN_TMP_LIST}"
-
-#rm -f "${FN_TMP_LIST}"
-echo "Done!" >> "/dev/stderr"
-
-cat "${FN_TMP_LASTMSG}" >> "/dev/stderr"
