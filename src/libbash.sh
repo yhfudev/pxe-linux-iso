@@ -104,29 +104,23 @@ ospkgget () {
 }
 
 # Debian/Ubuntu, RedHat/Fedora/CentOS, Arch
-ospkgset apt-get            yum                pacman
-ospkgset build-essential    build-essential    base-devel
-ospkgset lsb-release        redhat-lsb-core    redhat-lsb-core
-ospkgset coreutils          coreutils          coreutils
-ospkgset gawk               gawk               gawk
-ospkgset gnuplot            gnuplot            gnuplot
-ospkgset openssh-client     openssh-clients    openssh-clients
-ospkgset parted             parted             parted
-ospkgset xfsprogs           xfsprogs           xfsprogs
-ospkgset perl               perl               perl
-ospkgset dnsmasq            dnsmasq            dnsmasq
-ospkgset p7zip              p7zip              p7zip
-ospkgset nfs-common         nfs-common         nfs-common
-ospkgset nfs-kernel-server  nfs-kernel-server  nfs-kernel-server
-ospkgset portmap            portmap            portmap
-ospkgset subversion         svn                svn
-ospkgset git-all            git                git
-ospkgset tcpdump            tcpdump            tcpdump
-ospkgset tcptrace           tcptrace           tcptrace
-ospkgset octave             octave             octave
+ospkgset apt-get            yum                 pacman
+ospkgset build-essential    build-essential     base-devel
+ospkgset lsb-release        redhat-lsb-core     redhat-lsb-core
+ospkgset openssh-client     openssh-clients     openssh-clients
+ospkgset parted             parted              parted
+ospkgset subversion         svn                 svn
+ospkgset git-all            git                 git
+ospkgset dhcp3-server       dhcp                dhcp
+ospkgset tftpd-hpa          tftp-server         tftp-server
+ospkgset syslinux           syslinux            syslinux
+ospkgset nfs-kernel-server  nfs-utils           nfs-server
+ospkgset bind9              bind                bind
+ospkgset dnsmasq            dnsmasq             dnsmasq
 
 patch_centos_gawk () {
     yum -y install rpmdevtools readline-devel #libsigsegv-devel
+    yum -y install gcc byacc
     rpmdev-setuptree
 
     #FILELIST="gawk.spec gawk-3.1.8.tar.bz2 gawk-3.1.8-double-free-wstptr.patch gawk-3.1.8-syntax.patch"
@@ -134,7 +128,7 @@ patch_centos_gawk () {
     FILELIST="gawk.spec gawk-4.0.1.tar.gz"
     URL="http://archive.fedoraproject.org/pub/archive/fedora/linux/updates/17/SRPMS/gawk-4.0.1-1.fc17.src.rpm"
     cd ~/rpmbuild/SOURCES/; rm -f ${FILELIST}; cd - ; rm -f ${FILELIST}
-    wget "${URL}" -O ~/rpmbuild/SRPMS/$(basename "${URL}")
+    wget -c "${URL}" -O ~/rpmbuild/SRPMS/$(basename "${URL}")
     rpm2cpio ~/rpmbuild/SRPMS/$(basename "${URL}") | cpio -div
     mv ${FILELIST} ~/rpmbuild/SOURCES/
     sed -i 's@configure @configure --enable-switch --disable-libsigsegv @g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
@@ -143,6 +137,7 @@ patch_centos_gawk () {
     rpmbuild -bb --clean ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
     sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -i)/gawk-4.0.1-1.el6.$(uname -i).rpm
     ln -s $(which gawk) /bin/gawk
+    ln -s $(which gawk) /bin/awk
 }
 
 install_package () {
@@ -151,11 +146,14 @@ install_package () {
     PKGLST=
     FLG_GAWK_RH=0
     for i in $PARAM_NAME ; do
-        PKG=`ospkgget $OSTYPE $i`
+        PKG=$(ospkgget $OSTYPE $i)
+        if [ "${PKG}" = "" ]; then
+            PKG="$i"
+        fi
         echo "try to install package: $PKG($i)"
         if [ "$i" = "gawk" ]; then
-            if [ "" = "RedHat" ]; then
-                # patch gawk to support 'switch'
+            if [ "$OSTYPE" = "RedHat" ]; then
+                echo "patch gawk to support 'switch'"
                 echo | gawk '{a = 1; switch(a) { case 0: break; } }'
                 if [ $? = 1 ]; then
                     FLG_GAWK_RH=1
