@@ -885,7 +885,7 @@ tftp_init_directories () {
 
 tftp_init_service () {
     echo "[DBG] Install TFTP/NFS/DHCP servers ..."
-    install_package tftpd-hpa syslinux nfs-kernel-server dhcp3-server bind9
+    install_package tftpd-hpa syslinux nfs-kernel-server dhcp3-server #bind9
 
     tftp_init_directories
     $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
@@ -1625,6 +1625,8 @@ EOF
         $MYEXEC attach_to_file "${FN_TMP_ETCEXPORTS}" /etc/exports
         $MYEXEC sudo service nfs-kernel-server restart # Debian/Ubuntu
         $MYEXEC service nfs restart   # RedHat/CentOS
+        $MYEXEC systemctl restart rpc-idmapd.service
+        $MYEXEC systemctl restart rpc-mountd.service
     fi
 
     # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
@@ -1638,6 +1640,7 @@ EOF
     $MYEXEC echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
     $MYEXEC /etc/init.d/tftpd-hpa restart # debian/ubuntu
     $MYEXEC service xinetd restart # redhat/centos
+    $MYEXEC systemctl restart tftpd.socket tftpd.service # arch
 }
 
 process_file_list () {

@@ -124,7 +124,7 @@ ospkgset openssh-client     openssh-clients     openssh-clients
 ospkgset parted             parted              parted
 ospkgset subversion         svn                 svn
 ospkgset git-all            git                 git
-ospkgset dhcp3-server       dhcp                dhcpd
+ospkgset dhcp3-server       dhcp                dhcp
 ospkgset dhcp3-client       dhcp                dhcpcd
 ospkgset tftpd-hpa          tftp-server         tftp-hpa
 ospkgset syslinux           syslinux            syslinux
@@ -190,6 +190,16 @@ install_package () {
 
     Arch)
         INST_OPTS="-Syu"
+        # install loop module
+        lsmod | grep loop
+        if [ "$?" != "0" ]; then
+            modprobe loop
+
+            grep -Hrn loop /etc/modules-load.d/
+            if [ "$?" != "0" ]; then
+                echo "loop" > /etc/modules-load.d/tftpboot.conf
+            fi
+        fi
         ;;
     *)
         echo "Error: Not supported OS: $OSTYPE"
