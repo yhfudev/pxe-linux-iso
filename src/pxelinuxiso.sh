@@ -97,6 +97,23 @@ BEGIN {
             dist_arch = "i386";
             break;
 
+        # tinycorelinux.net
+        case "Core":
+            dist_name = "tinycore";
+            dist_type="core";
+            dist_arch = "x86";
+            break;
+        case "TinyCore":
+            dist_name = "tinycore";
+            dist_type="tiny";
+            dist_arch = "x86";
+            break;
+        case "CorePlus":
+            dist_name = "tinycore";
+            dist_type="plus";
+            dist_arch = "x86";
+            break;
+
         default:
             lstr = tolower (a[i]);
             #print "[DBG] lstr=" lstr;
@@ -123,12 +140,20 @@ BEGIN {
                 dist_name = "kali";
                 dist_type="net";
                 break;
+            case "beini":
+                dist_name = "beini";
+                dist_type = "live";
+                dist_arch = "x86";
+                break;
             case "x86_64":
                 dist_arch = "x86_64";
                 break;
             case "64bit":
             case "amd64":
                 dist_arch = "amd64";
+                break;
+            case "x86":
+                dist_arch = "x86";
                 break;
             case "32bit":
             case "i386":
@@ -171,6 +196,12 @@ BEGIN {
                 dist_type="net";
                 dist_arch = "dual";
                 flg_nfs=1;
+                break;
+            # tinycore
+            case "current":
+                if (match(dist_name, /tinycore/)) {
+                    dist_release = "4.7.7";
+                }
                 break;
 
             case "testing":
@@ -368,6 +399,23 @@ BEGIN {
             dist_arch = "i386";
             break;
 
+        # tinycorelinux.net
+        case "Core":
+            dist_name = "tinycore";
+            dist_release = "4.7.7";
+            dist_type="core";
+            break;
+        case "TinyCore":
+            dist_name = "tinycore";
+            dist_release = "4.7.7";
+            dist_type="tiny";
+            break;
+        case "CorePlus":
+            dist_name = "tinycore";
+            dist_release = "4.7.7";
+            dist_type="plus";
+            break;
+
         default:
             lstr = tolower (a[i]);
             #print "[DBG] lstr=" lstr;
@@ -394,12 +442,20 @@ BEGIN {
                 dist_name = "kali";
                 dist_type="net";
                 break;
+            case "beini":
+                dist_name = "beini";
+                dist_type = "live";
+                dist_arch = "x86";
+                break;
             case "x86_64":
                 dist_arch = "x86_64";
                 break;
             case "64bit":
             case "amd64":
                 dist_arch = "amd64";
+                break;
+            case "x86":
+                dist_arch = "x86";
                 break;
             case "32bit":
             case "i386":
@@ -445,6 +501,12 @@ BEGIN {
                 dist_type="net";
                 dist_arch = "dual";
                 flg_nfs=1;
+                break;
+            # tinycore
+            case "current":
+                if (match(dist_name, /tinycore/)) {
+                    dist_release = "4.7.7";
+                }
                 break;
 
             case "testing":
@@ -672,6 +734,12 @@ check_xxxsum () {
             rm -f "/tmp/pxelinuxiso-md5tmp"
         fi
     fi
+    if [ ! -f "/tmp/pxelinuxiso-md5tmp" ]; then
+        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME}.md5.txt -O "/tmp/pxelinuxiso-md5tmp"
+        if [ ! "$?" = "0" ]; then
+            rm -f "/tmp/pxelinuxiso-md5tmp"
+        fi
+    fi
     if [ -f "/tmp/pxelinuxiso-md5tmp" ]; then
         echo "[DBG] chk file /tmp/pxelinuxiso-md5tmp" >> "/dev/stderr"
         echo "[DBG] grep -i ${FN_SINGLE} /tmp/pxelinuxiso-md5tmp | awk '{print $1}'" >> "/dev/stderr"
@@ -805,6 +873,7 @@ tftp_init_directories () {
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-desktop/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-net/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-live/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
 
@@ -832,6 +901,7 @@ tftp_init_service () {
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-desktop/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-net/"
+    $MYEXEC mkdir -p "${TFTP_ROOT}/images-live/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
     $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
     $MYEXEC cd "${TFTP_ROOT}/netboot"
@@ -904,7 +974,11 @@ tftp_setup_pxe_iso () {
     DIST_TYPE="${DECLNXOUT_TYPE}"
     FLG_LIVE="${DECLNXOUT_FLG_LIVE}"
     DIST_NAME2="${DECLNXOUT_FLG_NFS}"
+    # if use NFS to share the content of ISO
     FLG_NFS=0
+    # if need to mount the ISO file; There's no need to mount ISO if ISO is small and boot from ISO directly.
+    FLG_MOUNT=1
+
     if [ ! "${A_DIST_NAME}" = "" ]; then
         DIST_NAME_TYPE="${A_DIST_NAME}"
         DIST_NAME="${A_DIST_NAME}"
@@ -919,32 +993,10 @@ tftp_setup_pxe_iso () {
         DIST_TYPE="${A_DIST_TYPE}"
     fi
 
-    export ISO_NAME=$(basename ${DIST_URL})
-    # if we unable to get information correctly from the name
-    #echo "[DBG] 2 detect_linux_dist ${ISO_NAME}" >> "/dev/stderr"
-    detect_linux_dist "${ISO_NAME}"
-    if [ "${DECLNXOUT_NAME}" = "" ]; then
-        ISO_NAME="${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-${ISO_NAME}"
-    fi
-
-    export DIST_PATHR="${DIST_NAME}/${DIST_RELEASE}/${DIST_ARCH}"
-    export DIST_FILE="${TFTP_ROOT}/downloads/${ISO_NAME}"
-    export DIST_MOUNTPOINT="images-${DIST_TYPE}/${DIST_PATHR}"
-
-    TFTP_TAG_LABEL="${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_${DIST_TYPE}"
-    TFTP_MENU_LABEL="${TFTP_TAG_LABEL}"
-    if [ ! "${PARAM_USER_LABEL}" = "" ]; then
-        TFTP_MENU_LABEL="${PARAM_USER_LABEL}"
-    fi
-
     echo "[DBG] DIST_NAME=${DIST_NAME}" >> "/dev/stderr"
     echo "[DBG] DIST_RELEASE=${DIST_RELEASE}" >> "/dev/stderr"
     echo "[DBG] DIST_ARCH=${DIST_ARCH}" >> "/dev/stderr"
     echo "[DBG] DIST_TYPE=${DIST_TYPE}" >> "/dev/stderr"
-    echo "[DBG] ISO_NAME=${ISO_NAME}" >> "/dev/stderr"
-    echo "[DBG] DIST_MOUNTPOINT=${DIST_MOUNTPOINT}" >> "/dev/stderr"
-    echo "[DBG] DIST_FILE=${DIST_FILE}" >> "/dev/stderr"
-
     FLG_QUIT=0
     if [ "${DIST_NAME}" = "" ]; then
         FLG_QUIT=1
@@ -965,6 +1017,50 @@ tftp_setup_pxe_iso () {
         FLG_QUIT=1
         echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
         echo "[ERR]   please specify by --disttype option!" >> "/dev/stderr"
+    fi
+
+    export ISO_NAME=$(basename ${DIST_URL})
+    if [ "${FLG_QUIT}" = "1" ]; then
+        DIST_NAME="${ISO_NAME}"
+        DIST_RELEASE=""
+        DIST_ARCH=""
+        DIST_TYPE=""
+    fi
+
+    # if we unable to get information correctly from the name
+    #echo "[DBG] 2 detect_linux_dist ${ISO_NAME}" >> "/dev/stderr"
+    detect_linux_dist "${ISO_NAME}"
+    if [ "${DECLNXOUT_NAME}" = "" ]; then
+        if [ ! "${DIST_TYPE}" = "" ]; then
+            ISO_NAME="${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-${ISO_NAME}"
+        fi
+    fi
+
+    export DIST_PATHR="${DIST_NAME}/${DIST_RELEASE}/${DIST_ARCH}"
+    export DIST_FILE="${TFTP_ROOT}/downloads/${ISO_NAME}"
+    export DIST_MOUNTPOINT="images-${DIST_TYPE}/${DIST_PATHR}"
+
+    TFTP_TAG_LABEL="${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_${DIST_TYPE}"
+    TFTP_MENU_LABEL="${TFTP_TAG_LABEL}"
+    if [ ! "${PARAM_USER_LABEL}" = "" ]; then
+        TFTP_MENU_LABEL="${PARAM_USER_LABEL}"
+    fi
+
+    echo "[DBG] ISO_NAME=${ISO_NAME}" >> "/dev/stderr"
+    echo "[DBG] DIST_MOUNTPOINT=${DIST_MOUNTPOINT}" >> "/dev/stderr"
+    echo "[DBG] DIST_FILE=${DIST_FILE}" >> "/dev/stderr"
+
+    # download and check the file
+    $MYEXEC down_url "${DIST_URL}" "${DIST_FILE}"
+    if [ "${FLG_QUIT}" = "1" ]; then
+        SZ=$(ls -s "${DIST_FILE}" | awk '{print $1}')
+        if [ $(( $SZ < 100000 )) = 1 ]; then
+            # we boot it from ISO image
+            FLG_QUIT=0
+            TFTP_MENU_LABEL="${ISO_NAME} (ISO)"
+            TFTP_TAG_LABEL="${ISO_NAME}"
+            #ISO_NAME=""
+        fi
     fi
     if [ "${FLG_QUIT}" = "1" ]; then
         exit 0
@@ -1013,6 +1109,10 @@ tftp_setup_pxe_iso () {
     "kali")
         echo "[DBG] dist kali" >> "/dev/stderr"
         DIST_TYPE="live"
+        ;;
+    "beini")
+        DIST_NAME_TYPE="tinycore"
+        #DIST_ARCH="x86";
         ;;
     esac
 
@@ -1370,35 +1470,80 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
             #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
             TFTP_MENU_LABEL="${TFTP_MENU_LABEL} (x86_64)"
+            
+            # or http?
+            # TFTP_APPEND_NFS="archisobasedir=arch archiso_pxe_http=${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
         ;;
+
+    "tinycore")
+
+        case "$DIST_TYPE" in
+        "plus")
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/vmlinuz"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/core.gz"
+            DNR_TCE="cde/optional"
+            ;;
+        *)
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/bzImage"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/tinycore.gz"
+            DNR_TCE="tce"
+            ;;
+        esac
+
+        DNR_TINYCORE="downloads/tinycore-fix/"
+        $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
+        FN_NFSUTILS=tinycore-${DIST_RELEASE}-nfs-utils.tcz
+        $MYEXEC down_url "http://tinycorelinux.net/4.x/${DIST_ARCH}/tcz/nfs-utils.tcz" "${TFTP_ROOT}/${DNR_TINYCORE}/${FN_NFSUTILS}"
+        echo "/${DNR_TINYCORE}/${FN_NFSUTILS}" > "${TFTP_ROOT}/${DNR_TINYCORE}/${ISO_NAME}-nfs.list"
+        TFTP_APPEND_NFS="nfsmount=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} tftplist=${DIST_NFSIP}:/${DNR_TINYCORE}/${ISO_NAME}-nfs.list tce=${DNR_TINYCORE}"
+
+        ;;
+
     *)
         echo "[ERR] Not supported distribution: ${DIST_NAME}" >> "/dev/stderr"
-        exit 0
+        FLG_MOUNT=0
+        #exit 0
         ;;
     esac
 
-    TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
-    cat << EOF >> "${FN_TMP_TFTPMENU}"
+    if [ "${FLG_MOUNT}" = "1" ]; then
+        TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+        cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}
     MENU LABEL ${TFTP_MENU_LABEL}
     ${TFTP_KERNEL}
     ${TFTP_APPEND}
 EOF
+    else
+        cat << EOF > "${FN_TMP_TFTPMENU}"
+LABEL ${TFTP_TAG_LABEL}_iso
+    MENU LABEL ${TFTP_MENU_LABEL}
+    KERNEL memdisk
+    #LINUX memdisk
+    INITRD downloads/${ISO_NAME}
+    #APPEND iso
+    APPEND iso raw
+EOF
+    fi
 
-    echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 noauto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+    if [ "${FLG_MOUNT}" = "1" ]; then
+        echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 noauto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+    fi
     if [ "${FLG_NFS}" = "1" ]; then
         echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
     fi
 
-    echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
-    echo "[INFO] You may want to mount the ISO by manual to test the file:" >> "/dev/stderr"
-    echo "[INFO]   mkdir -p '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
-    echo "[INFO]   mount -o loop,utf8 '${DIST_FILE}' '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
-    echo "[INFO] The following content will be attached to the file '/etc/fstab':" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    cat "${FN_TMP_ETCFSTAB}" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "[INFO] ==============================================================" >> "/dev/stderr"
+    if [ "${FLG_MOUNT}" = "1" ]; then
+        echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
+        echo "[INFO] You may want to mount the ISO by manual to test the file:" >> "/dev/stderr"
+        echo "[INFO]   mkdir -p '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
+        echo "[INFO]   mount -o loop,utf8 '${DIST_FILE}' '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
+        echo "[INFO] The following content will be attached to the file '/etc/fstab':" >> "/dev/stderr"
+        echo "" >> "/dev/stderr"
+        cat "${FN_TMP_ETCFSTAB}" >> "/dev/stderr"
+        echo "" >> "/dev/stderr"
+        echo "[INFO] ==============================================================" >> "/dev/stderr"
+    fi
 
     if [ "${FLG_NFS}" = "1" ]; then
         echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
@@ -1407,7 +1552,7 @@ EOF
         cat "${FN_TMP_ETCEXPORTS}" >> "/dev/stderr"
         echo "" >> "/dev/stderr"
         echo "[INFO] ==============================================================" >> "/dev/stderr"
-    fi >> "/dev/stderr"
+    fi
 
     echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
     echo "[INFO] The following content will be attached to the file" >> "/dev/stderr"
@@ -1422,9 +1567,6 @@ EOF
     fi
     #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
     $MYEXEC install_package nfs-common nfs-kernel-server portmap
-
-    # download and check the file
-    $MYEXEC down_url "${DIST_URL}" "${DIST_FILE}"
 
     DN_PXEBACKUP="/etc/pxelinuxisobak/"
     mkdir -p "${DN_PXEBACKUP}"
@@ -1725,6 +1867,7 @@ afb8c6192a2e1d1ba0fa3db9c531be6d  pentoo-i686-2013.0_RC1.8.iso
 9ed0286a23eeae77be6fd9b952c5f62c  initrd-kali-1.0.3-3.7-trunk-686-pae.img
 a6aaec29dad544d9d3c86d3bf63d7486  initrd-kali-1.0.4-3.7-trunk-686-pae.img
 a5bd239b9017943e0e4598ece7e7e85f  initrd-kali-1.0.4-3.7-trunk-amd64.img
+e9cae6b8b1c8bbf9ceae4ea7cf575589  beini-1.2.5-es.iso
 
 73d595b804149fca9547ed94db8ff44f  ubuntu-13.04-server-i386.iso
 c187e39bdb6e09283a8976caadd756b6  linux-headers-3.8.0-19_3.8.0-19.30_all.deb

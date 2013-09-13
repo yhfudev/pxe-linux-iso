@@ -27,6 +27,11 @@ detect_os_type () {
     grep Ubuntu /etc/lsb-release &> /dev/null && OSDIST="Ubuntu" && OSTYPE="Debian"
     test -e /etc/redhat-release && OSTYPE="RedHat"
     test -e /etc/fedora-release && OSTYPE="RedHat"
+    test -e $(which pacman) && OSTYPE="Arch"
+
+    OSDIST=
+    OSVERSION=
+    OSNAME=
 
     case "$OSTYPE" in
     Debian)
@@ -43,6 +48,13 @@ detect_os_type () {
         fi
         ;;
 
+    Arch)
+        if [ -f "/etc/os-release" ]; then
+            OSDIST=$(cat /etc/os-release | grep ^ID= | awk -F= '{print $2}')
+            OSVERSION=1
+            OSNAME=arch
+        fi
+        ;;
     *)
         echo "Error: Not supported OS: $OSTYPE"
         exit 0
@@ -53,7 +65,8 @@ detect_os_type () {
         OSDIST=`lsb_release -is`
         OSVERSION=`lsb_release -rs`
         OSNAME=`lsb_release -cs`
-    else
+    fi
+    if [ "${OSDIST}" = "" ]; then
         echo "Error: Not found lsb_release!"
     fi
     echo "Detected $OSTYPE system: $OSDIST $OSVERSION $OSNAME"
@@ -111,12 +124,13 @@ ospkgset openssh-client     openssh-clients     openssh-clients
 ospkgset parted             parted              parted
 ospkgset subversion         svn                 svn
 ospkgset git-all            git                 git
-ospkgset dhcp3-server       dhcp                dhcp
-ospkgset tftpd-hpa          tftp-server         tftp-server
+ospkgset dhcp3-server       dhcp                dhcpd
+ospkgset dhcp3-client       dhcp                dhcpcd
+ospkgset tftpd-hpa          tftp-server         tftp-hpa
 ospkgset syslinux           syslinux            syslinux
-ospkgset nfs-kernel-server  nfs-utils           nfs-server
+#ospkgset nfs-kernel-server  nfs-utils           nfs-server
+ospkgset nfs-kernel-server  nfs-utils           nfs-utils
 ospkgset bind9              bind                bind
-ospkgset dnsmasq            dnsmasq             dnsmasq
 
 patch_centos_gawk () {
     yum -y install rpmdevtools readline-devel #libsigsegv-devel
@@ -163,7 +177,27 @@ install_package () {
         fi
         PKGLST="${PKGLST} ${PKG}"
     done
-    sudo $INSTALLER install -y ${PKGLST}
+
+    INST_OPTS=""
+    case "$OSTYPE" in
+    Debian)
+        INST_OPTS="install -y"
+        ;;
+
+    RedHat)
+        INST_OPTS="install -y"
+        ;;
+
+    Arch)
+        INST_OPTS="-Syu"
+        ;;
+    *)
+        echo "Error: Not supported OS: $OSTYPE"
+        exit 0
+        ;;
+    esac
+
+    sudo $INSTALLER ${INST_OPTS} ${PKGLST}
     if [ "${FLG_GAWK_RH}" = "1" ]; then
         patch_centos_gawk
     fi
@@ -371,3 +405,47 @@ IPv4_convert () {
     #  IP known range
     OUTPUT_IPV4_DHCP_KNOW_RANGE="$(  IPv4_from_int $((  $intBASE + 1 + $SZ1  ))  )    $(  IPv4_from_int $((  $MID  ))  )"
 }
+
+############################################################
+# http://blog.n01se.net/blog-n01se-net-p-145.html
+# redirect tty fds to /dev/null
+redirect-std() {
+    [[ -t 0 ]] && exec </dev/null
+    [[ -t 1 ]] && exec >/dev/null
+    [[ -t 2 ]] && exec 2>/dev/null
+}
+
+# close all non-std* fds
+close-fds() {
+    eval exec {3..255}\>\&-
+}
+
+# full daemonization of external command with setsid
+daemonize() {
+    (                   # 1. fork
+        redirect-std    # 2.1. redirect stdin/stdout/stderr before setsid
+        cd /            # 3. ensure cwd isn't a mounted fs
+        # umask 0       # 4. umask (leave this to caller)
+        close-fds       # 5. close unneeded fds
+        exec setsid "$@"
+    ) &
+}
+
+# daemonize without setsid, keeps the child in the jobs table
+daemonize-job() {
+    (                   # 1. fork
+        redirect-std    # 2.2.1. redirect stdin/stdout/stderr
+        trap '' 1 2     # 2.2.2. guard against HUP and INT (in child)
+        cd /            # 3. ensure cwd isn't a mounted fs
+        # umask 0       # 4. umask (leave this to caller)
+        close-fds       # 5. close unneeded fds
+        if [[ $(type -t "$1") != file ]]; then
+            "$@"
+        else
+            exec "$@"
+        fi
+    ) &
+    disown -h $!       # 2.2.3. guard against HUP (in parent)
+}
+
+############################################################
