@@ -852,8 +852,10 @@ down_url () {
         $MYEXEC wget --no-check-certificate -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
         RET=$?
         if [ ${RET} = 0 ]; then
+            echo "[INFO] md5sum ... ${FN_SINGLE}" >> "/dev/stderr"
             md5sum  "${DN_SRCS}/${FN_SINGLE}" > /tmp/pxelinuxiso-md5sum-down
             $MYEXEC attach_to_file /tmp/pxelinuxiso-md5sum-down "${DN_SRCS}/MD5SUMS"
+            echo "[INFO] sha1sum ... ${FN_SINGLE}" >> "/dev/stderr"
             sha1sum "${DN_SRCS}/${FN_SINGLE}" > /tmp/pxelinuxiso-sha1sum-down
             $MYEXEC attach_to_file /tmp/pxelinuxiso-sha1sum-down "${DN_SRCS}/SHA1SUMS"
         else
@@ -873,6 +875,11 @@ tftp_init_directories () {
     RedHat)
         export SYSLINUX_ROOT=/usr/share/syslinux
         export HTTPD_ROOT=/var/www/html
+        ;;
+    Arch)
+        if [ ! -d "${SYSLINUX_ROOT}" ]; then
+            export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32
+        fi
         ;;
     esac
 
@@ -916,6 +923,7 @@ tftp_init_service () {
     $MYEXEC ln -s ../images-server/
     $MYEXEC ln -s ../images-desktop/
     $MYEXEC ln -s ../images-net/
+    $MYEXEC ln -s ../images-live/
     $MYEXEC ln -s ../downloads/
     $MYEXEC ln -s ../kickstarts/
     $MYEXEC cd -
@@ -1894,7 +1902,32 @@ if [ $FLG_SIMULATE = 1 ]; then
 fi
 
 echo "[DBG] Install basic software packages ..."
-install_package gawk wget coreutils
+
+EXEC_AWK="$(which gawk)"
+if [ ! -x "${EXEC_AWK}" ]; then
+  echo "[DBG] Try to install gawk." >> "/dev/stderr"
+  install_package gawk
+fi
+
+EXEC_AWK="$(which gawk)"
+if [ ! -x "${EXEC_AWK}" ]; then
+  echo "[ERR] Not exist awk!" >> "/dev/stderr"
+  exit 1
+fi
+
+EXEC_WGET="$(which wget)"
+if [ ! -x "${EXEC_WGET}" ]; then
+  echo "[DBG] Try to install wget." >> "/dev/stderr"
+  install_package wget
+fi
+
+EXEC_WGET="$(which wget)"
+if [ ! -x "${EXEC_WGET}" ]; then
+  echo "[ERR] Not exist wget!" >> "/dev/stderr"
+  exit 1
+fi
+
+install_package coreutils
 
 tftp_init_directories
 if [ "${FLG_INIT_TFTPROOT}" = "1" ]; then

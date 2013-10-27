@@ -56,7 +56,7 @@ detect_os_type () {
         fi
         ;;
     *)
-        echo "Error: Not supported OS: $OSTYPE"
+        echo "[ERR] Not supported OS: $OSTYPE"
         exit 0
         ;;
     esac
@@ -69,7 +69,7 @@ detect_os_type () {
     if [ "${OSDIST}" = "" ]; then
         echo "Error: Not found lsb_release!"
     fi
-    echo "Detected $OSTYPE system: $OSDIST $OSVERSION $OSNAME"
+    echo "[INFO] Detected $OSTYPE system: $OSDIST $OSVERSION $OSNAME"
     export OSTYPE
     export OSDIST
     export OSVERSION
@@ -128,9 +128,10 @@ ospkgset dhcp3-server       dhcp                dhcp
 ospkgset dhcp3-client       dhcp                dhcpcd
 ospkgset tftpd-hpa          tftp-server         tftp-hpa
 ospkgset syslinux           syslinux            syslinux
-#ospkgset nfs-kernel-server  nfs-utils           nfs-server
 ospkgset nfs-kernel-server  nfs-utils           nfs-utils
+ospkgset nfs-common         nfs-utils           nfs-utils
 ospkgset bind9              bind                bind
+ospkgset portmap            portmap             ""
 
 patch_centos_gawk () {
     yum -y install rpmdevtools readline-devel #libsigsegv-devel
@@ -167,12 +168,54 @@ install_package () {
         echo "try to install package: $PKG($i)"
         if [ "$i" = "gawk" ]; then
             if [ "$OSTYPE" = "RedHat" ]; then
-                echo "patch gawk to support 'switch'"
+                echo "[DBG] patch gawk to support 'switch'"
                 echo | gawk '{a = 1; switch(a) { case 0: break; } }'
                 if [ $? = 1 ]; then
                     FLG_GAWK_RH=1
-                    PKGLST="${PKGLST} rpmdevtools libsigsegv-devel readline-devel"
+                    PKG="rpmdevtools libsigsegv-devel readline-devel"
                 fi
+            fi
+        fi
+
+        echo "[DBG] OSTYPE = $OSTYPE"
+        if [ "$OSTYPE" = "Arch" ]; then
+            if [ "$i" = "portmap" ]; then
+                echo "[DBG] Ignore $i"
+                PKG=""
+            fi
+            if [ "$i" = "syslinux" ]; then
+                MACH=$(uname -m)
+                case "$MACH" in
+                x86_64|i386|i686)
+                    echo "[DBG] use standard method"
+                    ;;
+
+                *)
+                    echo "[DBG] Arch $MACH yet another installation of $i"
+                    PKG=""
+                    echo "[DBG] Download package for $MACH"
+                    cd /tmp
+                    DATE1=$(date +%Y-%m-%d)
+                    rm -f index.html*
+                    URL_ORIG="https://www.archlinux.org/packages/testing/i686/syslinux/download/"
+                    URL_REAL=$(wget --no-check-certificate ${URL_ORIG} 2>&1 | grep pkg | grep $DATE1 | awk '{print $3}')
+                    FN_SYSLI=$(basename ${URL_REAL})
+                    if [ ! -f "${FN_SYSLI}" ]; then
+                        if [ ! -f index.html ]; then
+                            echo "[ERR] not found downloaded file from ${URL_ORIG}(${URL_REAL})"
+                        else
+                            echo "[DBG] rename index.html to ${FN_SYSLI}"
+                            mv index.html "${FN_SYSLI}"
+                        fi
+                    fi
+                    if [ ! -f "${FN_SYSLI}" ]; then
+                        echo "[ERR] not found file ${FN_SYSLI}"
+                        exit 0
+                    fi
+                    tar -xf "${FN_SYSLI}"
+                    cd -
+                    ;;
+                esac
             fi
         fi
         PKGLST="${PKGLST} ${PKG}"
@@ -189,7 +232,7 @@ install_package () {
         ;;
 
     Arch)
-        INST_OPTS="-Syu"
+        INST_OPTS="-S"
         # install loop module
         lsmod | grep loop
         if [ "$?" != "0" ]; then
@@ -202,7 +245,7 @@ install_package () {
         fi
         ;;
     *)
-        echo "Error: Not supported OS: $OSTYPE"
+        echo "[ERR] Not supported OS: $OSTYPE"
         exit 0
         ;;
     esac
@@ -223,26 +266,26 @@ detect_os_type
 ######################################################################
 EXEC_SSH="$(which ssh)"
 if [ ! -x "${EXEC_SSH}" ]; then
-  echo "Try to install ssh." >> "/dev/stderr"
+  echo "[DBG] Try to install ssh." >> "/dev/stderr"
   install_package openssh-client
 fi
 
 EXEC_SSH="$(which ssh)"
 if [ ! -x "${EXEC_SSH}" ]; then
-  echo "Error: Not exist ssh!" >> "/dev/stderr"
+  echo "[ERR] Not exist ssh!" >> "/dev/stderr"
   exit 1
 fi
 EXEC_SSH="$(which ssh) -oBatchMode=yes -CX"
 
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
-  echo "Try to install gawk." >> "/dev/stderr"
+  echo "[DBG] Try to install gawk." >> "/dev/stderr"
   install_package gawk
 fi
 
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
-  echo "Error: Not exist awk!" >> "/dev/stderr"
+  echo "[ERR] Not exist awk!" >> "/dev/stderr"
   exit 1
 fi
 
@@ -267,13 +310,13 @@ fi
 # 确保本地 id_rsa.pub 复制到远程机器
 ssh_ensure_connection () {
     PARAM_SSHURL="${1}"
-    echo "test host: ${PARAM_SSHURL}"
+    echo "[DBG] test host: ${PARAM_SSHURL}"
     $EXEC_SSH "${PARAM_SSHURL}" "ls > /dev/null"
     if [ ! "$?" = "0" ]; then
-        echo "copy id to ${PARAM_SSHURL} ..."
+        echo "[DBG] copy id to ${PARAM_SSHURL} ..."
         ssh-copy-id -i ~/.ssh/id_rsa.pub "${PARAM_SSHURL}"
     else
-        echo "pass id : ${PARAM_SSHURL}."
+        echo "[DBG] pass id : ${PARAM_SSHURL}."
     fi
     if [ "$?" = "0" ]; then
         $EXEC_SSH "${PARAM_SSHURL}" "yum -y install xauth libcanberra-gtk2 dejavu-lgc-sans-fonts"
