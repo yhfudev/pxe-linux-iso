@@ -136,6 +136,10 @@ BEGIN {
             case "linuxmint":
                 dist_name = "mint";
                 break;
+            case "clonezilla":
+                dist_name = "clonezilla";
+                dist_type="live";
+                break;
             case "kali":
                 dist_name = "kali";
                 dist_type="net";
@@ -437,6 +441,10 @@ BEGIN {
                 break;
             case "linuxmint":
                 dist_name = "mint";
+                break;
+            case "clonezilla":
+                dist_name = "clonezilla";
+                dist_type="live";
                 break;
             case "kali":
                 dist_name = "kali";
@@ -850,8 +858,8 @@ down_url () {
             $MYEXEC attach_to_file /tmp/pxelinuxiso-sha1sum-down "${DN_SRCS}/SHA1SUMS"
         else
             echo "[ERR] download file ${PARAM_URL0} error!" >> "/dev/stderr"
-            echo "[DBG] exit 0" >> "/dev/stderr"
-            exit 0
+            #echo "[DBG] exit 0" >> "/dev/stderr"
+            #exit 0
         fi
     fi
 }
@@ -917,6 +925,7 @@ tftp_init_service () {
     $MYEXEC ln -s "${TFTP_ROOT}/images-server/"
     $MYEXEC ln -s "${TFTP_ROOT}/images-desktop/"
     $MYEXEC ln -s "${TFTP_ROOT}/images-net/"
+    $MYEXEC ln -s "${TFTP_ROOT}/images-live/"
     $MYEXEC ln -s "${TFTP_ROOT}/downloads/"
     $MYEXEC ln -s "${TFTP_ROOT}/kickstarts/"
     $MYEXEC cd -
@@ -1191,13 +1200,31 @@ tftp_setup_pxe_iso () {
             fi
             ;;
 
-        "server"|"desktop")
+        "desktop")
             # desktop, live?
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
             TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
+
+            # automaticly check the name of the 'vmlinuz'
+            $MYEXEC mount -o loop,utf8 "${DIST_FILE}" "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/vmlinuz" ]; then
+                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/" -name "vmlinu*" ) ; do
+                    if [ -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/$(basename $i)" ]; then
+                        TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/$(basename $i)"
+                    fi
+                done
+            fi
+            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/initrd.lz" ]; then
+                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/" -name "initrd*" ) ; do
+                    if [ -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/$(basename $i)" ]; then
+                        TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/$(basename $i)"
+                    fi
+                done
+            fi
+            $MYEXEC umount "${DIST_FILE}"
 
             if [ "${FLG_NON_PAE}" = "1" ]; then
               URL_VMLINUZ=
@@ -1497,6 +1524,24 @@ EOF
         echo "/${DNR_TINYCORE}/${FN_NFSUTILS}" > "${TFTP_ROOT}/${DNR_TINYCORE}/${ISO_NAME}-nfs.list"
         TFTP_APPEND_NFS="nfsmount=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} tftplist=${DIST_NFSIP}:/${DNR_TINYCORE}/${ISO_NAME}-nfs.list tce=${DNR_TINYCORE}"
 
+        ;;
+
+    "clonezilla")
+        echo "[DBG] dist fedora" >> "/dev/stderr"
+        case "$DIST_TYPE" in
+        "live")
+            # http://clonezilla.org/livepxe.php
+            FLG_NFS=0
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
+            TFTP_APPEND_NFS=""
+            TFTP_APPEND_OTHER="boot=live config noswap nolocales edd=on nomodeset ocs_live_run=\"ocs-live-general\" ocs_live_extra_param=\"\" keyboard-layouts=\"\" ocs_live_batch=\"no\" locales=\"\" vga=788 nosplash noprompt fetch=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/live/filesystem.squashfs"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
+            ;;
+        *)
+            echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
         ;;
 
     *)
@@ -1872,6 +1917,7 @@ a6aaec29dad544d9d3c86d3bf63d7486  initrd-kali-1.0.4-3.7-trunk-686-pae.img
 a5bd239b9017943e0e4598ece7e7e85f  initrd-kali-1.0.4-3.7-trunk-amd64.img
 e9cae6b8b1c8bbf9ceae4ea7cf575589  beini-1.2.5-es.iso
 
+8d72e2db7e72e13813731eab37a14d26  ubuntu-13.04-desktop-amd64.iso
 73d595b804149fca9547ed94db8ff44f  ubuntu-13.04-server-i386.iso
 c187e39bdb6e09283a8976caadd756b6  linux-headers-3.8.0-19_3.8.0-19.30_all.deb
 037f96bdbfef9c587289c58532e40f47  linux-headers-3.8.0-19-wt-non-pae_3.8.0-19.30_i386.deb
@@ -1880,6 +1926,9 @@ a7ef8da234153e7c8daba0f82f282df8  linux-image-3.8.0-19-wt-non-pae_3.8.0-19.30_i3
 d3374a10f71468978428a383c3267aae  vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386
 
 4a5fa01c81cc300f4729136e28ebe600  CentOS-6.4-x86_64-minimal.iso
+f87e89a502fb2d1f30ca0f9a927c9a91  archlinux-2013.09.01-dual.iso
+76c3c84f478673341012584e5cea534f  clonezilla-live-20130819-raring-i386.iso
+
 EOF
 
 cat << EOF > ${FN_SHA1TMP}
@@ -1892,6 +1941,9 @@ bb14f4e1fc0656a14615e40d727f6c49e8202d38  kali-linux-1.0.4-amd64.iso
 01324e8486f16d7d754e1602b9afe135f5e98c8a  kali-linux-1.0.4-i386-mini.iso
 68b91a8894709cc132ab7cd9eca57513e1ce478b  kali-linux-1.0.4-i386.iso
 6232efa014d9c6798396b63152c4c9a08b279f5e  CentOS-6.4-x86_64-minimal.iso
+27bbe172d66d4ce634d10fd655e840f72fe56130  ubuntu-13.04-server-i386.iso
+3b087acd273656c55244baa7b7f1a147be7da990  archlinux-2013.09.01-dual.iso
+1b53edcb6a457c4a716ec77e5d623177ea1e7008  clonezilla-live-20130819-raring-i386.iso
 EOF
 
 echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
@@ -1934,4 +1986,5 @@ test_down_some_iso () {
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-LiveCD.iso
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-minimal.iso
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-netinstall.iso
+    #http://sourceforge.net/projects/clonezilla/files/clonezilla_live_alternative/20130819-raring/clonezilla-live-20130819-raring-i386.iso
 }
