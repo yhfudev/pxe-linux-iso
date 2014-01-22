@@ -197,7 +197,7 @@ install_package () {
                     cd /tmp
                     DATE1=$(date +%Y-%m-%d)
                     rm -f index.html*
-                    URL_ORIG="https://www.archlinux.org/packages/testing/i686/syslinux/download/"
+                    URL_ORIG="https://www.archlinux.org/packages/core/i686/syslinux/download/"
                     URL_REAL=$(wget --no-check-certificate ${URL_ORIG} 2>&1 | grep pkg | grep $DATE1 | awk '{print $3}')
                     FN_SYSLI=$(basename ${URL_REAL})
                     if [ ! -f "${FN_SYSLI}" ]; then

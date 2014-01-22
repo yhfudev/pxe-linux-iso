@@ -27,6 +27,24 @@ FN_TMP_LIST="/tmp/pxelinuxiso-iso-file-list"
 export TFTP_ROOT=/var/lib/tftpboot
 export DIST_NFSIP=192.168.0.1
 
+export HTTPD_ROOT=/var/www
+export SYSLINUX_ROOT=/usr/lib/syslinux
+case "$OSTYPE" in
+RedHat)
+    export SYSLINUX_ROOT=/usr/share/syslinux
+    export HTTPD_ROOT=/var/www/html
+    ;;
+Arch)
+    TFTP_ROOT="/srv/tftp"
+    if [ ! -d "${HTTPD_ROOT}" ]; then
+        export HTTPD_ROOT=/srv/http
+    fi
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32
+    fi
+    ;;
+esac
+
 ############################################################
 # detect the linux distribution
 FN_AWK_DET_ISO="/tmp/pxelinuxiso-detlinuxiso.awk"
@@ -869,19 +887,10 @@ down_url () {
 tftp_init_directories () {
     # Ubuntu: /usr/lib/syslinux/
     # CentOS: /usr/share/syslinux/
-    export HTTPD_ROOT=/var/www
-    export SYSLINUX_ROOT=/usr/lib/syslinux
-    case "$OSTYPE" in
-    RedHat)
-        export SYSLINUX_ROOT=/usr/share/syslinux
-        export HTTPD_ROOT=/var/www/html
-        ;;
-    Arch)
-        if [ ! -d "${SYSLINUX_ROOT}" ]; then
-            export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32
-        fi
-        ;;
-    esac
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        echo "[DBG] Error in searching syslinux folder: ${SYSLINUX_ROOT}"
+        return
+    fi
 
     $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
 
@@ -906,9 +915,16 @@ tftp_init_service () {
     $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
 
     $MYEXEC alias cp=cp
-    $MYEXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
+    if [ -f "${SYSLINUX_ROOT}/pxelinux.0" ]; then
+        $MYEXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
+        $MYEXEC cp "${SYSLINUX_ROOT}/memdisk"    "${TFTP_ROOT}/netboot/"
+    else
+        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${TFTP_ROOT}/netboot/"
+        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${TFTP_ROOT}/netboot/"
+        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/ldlinux.c32" "${TFTP_ROOT}/netboot/"
+        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/libutil.c32" "${TFTP_ROOT}/netboot/"
+    fi
     $MYEXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${TFTP_ROOT}/netboot/"
-    $MYEXEC cp "${SYSLINUX_ROOT}/memdisk"    "${TFTP_ROOT}/netboot/"
     $MYEXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${TFTP_ROOT}/netboot/"
     $MYEXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${TFTP_ROOT}/netboot/"
 
@@ -1580,7 +1596,7 @@ EOF
     fi
 
     if [ "${FLG_MOUNT}" = "1" ]; then
-        echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 noauto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+        echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
     fi
     if [ "${FLG_NFS}" = "1" ]; then
         echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
@@ -1676,10 +1692,11 @@ EOF
             $MYEXEC cp /tmp/aaa /etc/exports
         fi
         $MYEXEC attach_to_file "${FN_TMP_ETCEXPORTS}" /etc/exports
-        $MYEXEC sudo service nfs-kernel-server restart # Debian/Ubuntu
-        $MYEXEC service nfs restart   # RedHat/CentOS
-        $MYEXEC systemctl restart rpc-idmapd.service
-        $MYEXEC systemctl restart rpc-mountd.service
+        #$MYEXEC sudo service nfs-kernel-server restart # Debian/Ubuntu
+        #$MYEXEC service nfs restart   # RedHat/CentOS
+        #$MYEXEC systemctl restart rpc-idmapd.service
+        #$MYEXEC systemctl restart rpc-mountd.service
+        $MYEXEC exportfs -arv
     fi
 
     # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
@@ -1960,8 +1977,7 @@ d3374a10f71468978428a383c3267aae  vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386
 
 4a5fa01c81cc300f4729136e28ebe600  CentOS-6.4-x86_64-minimal.iso
 f87e89a502fb2d1f30ca0f9a927c9a91  archlinux-2013.09.01-dual.iso
-76c3c84f478673341012584e5cea534f  clonezilla-live-20130819-raring-i386.iso
-
+03c490a202ffa7accf2638b62a357849  clonezilla-live-20131216-trusty-i386.iso
 EOF
 
 cat << EOF > ${FN_SHA1TMP}
@@ -1976,7 +1992,7 @@ bb14f4e1fc0656a14615e40d727f6c49e8202d38  kali-linux-1.0.4-amd64.iso
 6232efa014d9c6798396b63152c4c9a08b279f5e  CentOS-6.4-x86_64-minimal.iso
 27bbe172d66d4ce634d10fd655e840f72fe56130  ubuntu-13.04-server-i386.iso
 3b087acd273656c55244baa7b7f1a147be7da990  archlinux-2013.09.01-dual.iso
-1b53edcb6a457c4a716ec77e5d623177ea1e7008  clonezilla-live-20130819-raring-i386.iso
+eeb8088f5fbf555093086c30e90f0e0d82cf7825  clonezilla-live-20131216-trusty-i386.iso
 EOF
 
 echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
@@ -2019,5 +2035,5 @@ test_down_some_iso () {
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-LiveCD.iso
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-minimal.iso
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-netinstall.iso
-    #http://sourceforge.net/projects/clonezilla/files/clonezilla_live_alternative/20130819-raring/clonezilla-live-20130819-raring-i386.iso
+    #http://sourceforge.net/projects/clonezilla/files/clonezilla_live_alternative_testing/20131216-trusty/clonezilla-live-20131216-trusty-i386.iso
 }
