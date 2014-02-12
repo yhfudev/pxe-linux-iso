@@ -27,7 +27,7 @@ detect_os_type () {
     grep Ubuntu /etc/lsb-release &> /dev/null && OSDIST="Ubuntu" && OSTYPE="Debian"
     test -e /etc/redhat-release && OSTYPE="RedHat"
     test -e /etc/fedora-release && OSTYPE="RedHat"
-    test -e $(which pacman) && OSTYPE="Arch"
+    which pacman && OSTYPE="Arch"
 
     OSDIST=
     OSVERSION=
@@ -150,7 +150,8 @@ patch_centos_gawk () {
     sed -i 's@--with-libsigsegv-prefix=[^ ]*@@g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
     sed -i 's@Conflicts: filesystem@#Conflicts: filesystem@g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
     rpmbuild -bb --clean ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
-    sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -i)/gawk-4.0.1-1.el6.$(uname -i).rpm
+    #sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -i)/gawk-4.0.1-1.el6.$(uname -i).rpm
+    sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -p)/gawk-4.0.1-1.el6.$(uname -p).rpm
     ln -s $(which gawk) /bin/gawk
     ln -s $(which gawk) /bin/awk
 }

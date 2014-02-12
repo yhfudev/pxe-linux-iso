@@ -1189,6 +1189,18 @@ tftp_setup_pxe_iso () {
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz"
             TFTP_APPEND_NFS=""
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux"
+
+            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux" ]; then
+                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "*linu*" ) ; do
+                    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename $i)"
+                done
+            fi
+            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz" ]; then
+                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "initrd*" ) ; do
+                    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename $i)"
+                done
+            fi
+
             if [ "${FLG_NON_PAE}" = "1" ]; then
 
 #TFTP_ROOT="/home/yhfu/homegw/var/lib/tftpboot"
@@ -1236,16 +1248,12 @@ tftp_setup_pxe_iso () {
             $MYEXEC mount -o loop,utf8 "${DIST_FILE}" "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/vmlinuz" ]; then
                 for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/" -name "vmlinu*" ) ; do
-                    if [ -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/$(basename $i)" ]; then
-                        TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/$(basename $i)"
-                    fi
+                    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/$(basename $i)"
                 done
             fi
             if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/initrd.lz" ]; then
                 for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/" -name "initrd*" ) ; do
-                    if [ -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/$(basename $i)" ]; then
-                        TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/$(basename $i)"
-                    fi
+                    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/$(basename $i)"
                 done
             fi
             $MYEXEC umount "${DIST_FILE}"
@@ -1770,7 +1778,7 @@ usage () {
     echo "" >> "/dev/stderr"
     echo "Features" >> "/dev/stderr"
     echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" >> "/dev/stderr"
-    echo "  2. Can be run in CentOS/Ubuntu" >> "/dev/stderr"
+    echo "  2. Can be run in Redhat/CentOS/Ubuntu/Archlinux" >> "/dev/stderr"
     echo "  2. Support CD/DVDs of Fedora/CentOS/Debian/Ubuntu/Mint/Kali/..." >> "/dev/stderr"
     echo "" >> "/dev/stderr"
     echo "Prerequisites" >> "/dev/stderr"
@@ -1920,12 +1928,7 @@ fi
 
 echo "[DBG] Install basic software packages ..."
 
-EXEC_AWK="$(which gawk)"
-if [ ! -x "${EXEC_AWK}" ]; then
-  echo "[DBG] Try to install gawk." >> "/dev/stderr"
-  install_package gawk
-fi
-
+install_package gawk
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
   echo "[ERR] Not exist awk!" >> "/dev/stderr"
