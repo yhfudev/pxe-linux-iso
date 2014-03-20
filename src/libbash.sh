@@ -7,7 +7,15 @@
 #
 # Copyright 2013 Yunhui Fu
 # License: GPL v3.0 or later
+#####################################################################
+# detect if the ~/bin is included in environment variable $PATH
+echo $PATH | grep "~/bin"
+if [ ! "$?" = "0" ]; then
+    echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
+    export PATH=~/bin:$PATH
+fi
 
+#####################################################################
 EXEC_SSH="$(which ssh) -oBatchMode=yes -CX"
 EXEC_SCP="$(which scp)"
 EXEC_AWK="$(which awk)"
@@ -86,7 +94,7 @@ hget () {
   eval echo '${hash'"$KEY"'#hash}'
 }
 
-hiter() { 
+hiter() {
     for h in $(eval echo '${!'$1'*}') ; do
         key=${h#$1*}
         echo "$key=`hget $key`"
@@ -133,6 +141,10 @@ ospkgset nfs-common         nfs-utils           nfs-utils
 ospkgset bind9              bind                bind
 ospkgset portmap            portmap             ""
 
+# compile gawk with switch support
+# and install to system
+# WARNING: the CentOS boot program depend the awk, and if the system upgrade the gawk again,
+#   new installed gawk will not support 
 patch_centos_gawk () {
     yum -y install rpmdevtools readline-devel #libsigsegv-devel
     yum -y install gcc byacc
@@ -149,11 +161,19 @@ patch_centos_gawk () {
     sed -i 's@configure @configure --enable-switch --disable-libsigsegv @g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
     sed -i 's@--with-libsigsegv-prefix=[^ ]*@@g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
     sed -i 's@Conflicts: filesystem@#Conflicts: filesystem@g' ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
-    rpmbuild -bb --clean ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
-    #sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -i)/gawk-4.0.1-1.el6.$(uname -i).rpm
-    sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -p)/gawk-4.0.1-1.el6.$(uname -p).rpm
-    ln -s $(which gawk) /bin/gawk
-    ln -s $(which gawk) /bin/awk
+
+    # we don't install gawk to system's directory
+    # instead, we install the new gawk in ~/bin
+    #rpmbuild -bb --clean ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
+    ##sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -i)/gawk-4.0.1-1.el6.$(uname -i).rpm
+    #sudo rpm -U --force ~/rpmbuild/RPMS/$(uname -p)/gawk-4.0.1-1.el6.$(uname -p).rpm
+    #ln -s $(which gawk) /bin/gawk
+    #ln -s $(which gawk) /bin/awk
+    rpmbuild -bb ~/rpmbuild/SOURCES/$(echo "${FILELIST}" | awk '{print $1}')
+    mkdir -p ~/bin/
+    cp ~/rpmbuild/BUILD/gawk-4.0.1/gawk ~/bin/
+    ln -s ~/bin/gawk ~/bin/awk
+    rm -rf ~/rpmbuild/BUILD/gawk-4.0.1/
 }
 
 install_package () {
@@ -233,7 +253,7 @@ install_package () {
         ;;
 
     Arch)
-        INST_OPTS="-S"
+        INST_OPTS="-Syu"
         # install loop module
         lsmod | grep loop
         if [ "$?" != "0" ]; then
@@ -254,6 +274,17 @@ install_package () {
     sudo $INSTALLER ${INST_OPTS} ${PKGLST}
     if [ "${FLG_GAWK_RH}" = "1" ]; then
         patch_centos_gawk
+    fi
+}
+
+# check if command is not exist, then install the package
+check_install_package () {
+    PARAM_BIN=$1
+    shift
+    PARAM_PKG=$1
+    shift
+    if [ ! -x "${PARAM_BIN}" ]; then
+        install_package "${PARAM_PKG}"
     fi
 }
 

@@ -11,7 +11,7 @@
 # License: GPL v3.0 or later
 
 #DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
-DN_EXEC="$(dirname "$0")"
+DN_EXEC="$(dirname $(readlink -f "$0"))"
 if [ ! "${DN_EXEC}" = "" ]; then
     DN_EXEC="${DN_EXEC}/"
 else
@@ -166,6 +166,14 @@ BEGIN {
                 dist_name = "beini";
                 dist_type = "live";
                 dist_arch = "x86";
+                break;
+            case "puppy":
+                dist_name = "puppy";
+                dist_type = "live";
+                break;
+            case "veket":
+                dist_name = "veket";
+                dist_type = "live";
                 break;
             case "x86_64":
                 dist_arch = "x86_64";
@@ -472,6 +480,14 @@ BEGIN {
                 dist_name = "beini";
                 dist_type = "live";
                 dist_arch = "x86";
+                break;
+            case "puppy":
+                dist_name = "puppy";
+                dist_type = "live";
+                break;
+            case "veket":
+                dist_name = "veket";
+                dist_type = "live";
                 break;
             case "x86_64":
                 dist_arch = "x86_64";
@@ -1147,6 +1163,9 @@ tftp_setup_pxe_iso () {
         DIST_NAME_TYPE="tinycore"
         #DIST_ARCH="x86";
         ;;
+    "veket")
+        DIST_NAME_TYPE="puppy"
+        ;;
     esac
 
     rm -f "${FN_TMP_TFTPMENU}"
@@ -1229,7 +1248,7 @@ tftp_setup_pxe_iso () {
 #cd ..
 
 
-                URL_INITRD="http://192.168.2.9/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.gz"
+                URL_INITRD="http://${DIST_NFSIP}/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.gz"
                 URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.8.019wtnonp-20130429091312-e20cgo6obhlyk3fi-5/vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386"
                 TFTP_KERNEL="KERNEL downloads/$(basename ${URL_VMLINUZ})"
                 TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
@@ -1510,6 +1529,7 @@ EOF
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
             #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_OTHER=""
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
             TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
@@ -1576,6 +1596,32 @@ EOF
         esac
         ;;
 
+    "puppy")
+        # http://vercot.com/~serva/an/NonWindowsPXE3.html
+        #$MYEXEC wget -c http://vercot.com/~serva/download/INITRD_N01.GZ -O ${TFTP_ROOT}/downloads/puppy-initrd_n01.gz
+        #cat << EOF > "${FN_TMP_TFTPMENU}"
+#LABEL ${TFTP_TAG_LABEL}_iso
+    #MENU LABEL ${TFTP_MENU_LABEL}
+    #IPAPPEND 2
+    #KERNEL ${DIST_MOUNTPOINT}/vmlinuz
+    #INITRD ${DIST_MOUNTPOINT}/initrd.gz,downloads/puppy-initrd_n01.gz
+    #APPEND netpath=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/
+#EOF
+        check_install_package "$(which cpio)" cpio
+        $MYEXEC rm -rf ${TFTP_ROOT}/temp
+        $MYEXEC mkdir ${TFTP_ROOT}/temp
+        $MYEXEC cd ${TFTP_ROOT}/temp
+        zcat ${TFTP_ROOT}/${DIST_MOUNTPOINT}/initrd.gz | cpio -i -d
+        $MYEXEC cp ${TFTP_ROOT}/${DIST_MOUNTPOINT}/*.sfs ${TFTP_ROOT}/temp/
+        find . | cpio -o -H newc | gzip -4 > ${TFTP_ROOT}/downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-initrd.gz
+        $MYEXEC cd ..
+        $MYEXEC rm -rf ${TFTP_ROOT}/temp
+        $MYEXEC cp ${TFTP_ROOT}/${DIST_MOUNTPOINT}/vmlinuz ${TFTP_ROOT}/downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-vmlinuz
+        $MYEXEC umount ${TFTP_ROOT}/${DIST_MOUNTPOINT}
+        TFTP_KERNEL="KERNEL downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-vmlinuz"
+        TFTP_APPEND_INITRD="initrd=downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-initrd.gz"
+        ;;
+
     *)
         echo "[ERR] Not supported distribution: ${DIST_NAME}" >> "/dev/stderr"
         FLG_MOUNT=0
@@ -1596,9 +1642,7 @@ EOF
 LABEL ${TFTP_TAG_LABEL}_iso
     MENU LABEL ${TFTP_MENU_LABEL}
     KERNEL memdisk
-    #LINUX memdisk
     INITRD downloads/${ISO_NAME}
-    #APPEND iso
     APPEND iso raw
 EOF
     fi
@@ -1717,7 +1761,7 @@ EOF
     fi
     $MYEXEC echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
     $MYEXEC /etc/init.d/tftpd-hpa restart # debian/ubuntu
-    $MYEXEC service xinetd restart # redhat/centos
+    $MYEXEC service xinetd restart        # redhat/centos
     $MYEXEC systemctl restart tftpd.socket tftpd.service # arch
 }
 
@@ -1918,11 +1962,34 @@ attach_to_file () {
     fi
 }
 
+FN_CMD=/dev/stderr
+FN_DBG=/dev/null
 myexec_ignore () {
-    echo "[DBG] (skip) $*"
+    echo "[DBG] (skip) $*" >> "${FN_CMD}"
+    echo "[DBG] (skip) $*" >> "${FN_DBG}"
+    A=
+    while [ ! "$1" = "" ]; do
+        A="$A \"$1\""
+        shift
+    done
+    #echo "[DBG] (skip) $A" >> "${FN_CMD}"
+    echo "[DBG] (skip) $A" >> "${FN_DBG}"
 }
-MYEXEC=
-if [ $FLG_SIMULATE = 1 ]; then
+myexec_trace () {
+    echo "[DBG] $*" >> "${FN_CMD}"
+    echo "[DBG] $*" >> "${FN_DBG}"
+    A=
+    while [ ! "$1" = "" ]; do
+        A="$A \"$1\""
+        shift
+    done
+    #echo "[DBG] $A" >> "${FN_CMD}"
+    echo "[DBG] $A" >> "${FN_DBG}"
+    eval $A
+}
+MYEXEC=myexec_trace
+#MYEXEC=
+if [ "$FLG_SIMULATE" = "1" ]; then
     MYEXEC=myexec_ignore
 fi
 
@@ -1980,7 +2047,11 @@ d3374a10f71468978428a383c3267aae  vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386
 
 4a5fa01c81cc300f4729136e28ebe600  CentOS-6.4-x86_64-minimal.iso
 f87e89a502fb2d1f30ca0f9a927c9a91  archlinux-2013.09.01-dual.iso
+e6b72dee252d9b3c32d9b7d56ed93b51  archlinux-2014.02.01-dual.iso
 03c490a202ffa7accf2638b62a357849  clonezilla-live-20131216-trusty-i386.iso
+
+b6658ab75cd5d48f358f0ee31b06b934  lupu-525.iso
+ea177aa9af0b4806cc82742f7ba946df  slacko-5.6-4G-NON-PAE.iso
 EOF
 
 cat << EOF > ${FN_SHA1TMP}
@@ -1995,7 +2066,11 @@ bb14f4e1fc0656a14615e40d727f6c49e8202d38  kali-linux-1.0.4-amd64.iso
 6232efa014d9c6798396b63152c4c9a08b279f5e  CentOS-6.4-x86_64-minimal.iso
 27bbe172d66d4ce634d10fd655e840f72fe56130  ubuntu-13.04-server-i386.iso
 3b087acd273656c55244baa7b7f1a147be7da990  archlinux-2013.09.01-dual.iso
+eb4c971c71b505b5c1be25f1710e6579987fda3b  archlinux-2014.02.01-dual.iso
 eeb8088f5fbf555093086c30e90f0e0d82cf7825  clonezilla-live-20131216-trusty-i386.iso
+
+18fecad3e94be2026e1bb12b8c14eb76324a56a1  lupu-525.iso
+497f6b61f4265e7dadc961039167b7c2f97c97ee  slacko-5.6-4G-NON-PAE.iso
 EOF
 
 echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
@@ -2019,8 +2094,8 @@ test_down_some_iso () {
     #down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-GNOME-32.iso"
     #down_url "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-GNOME-64.iso"
 
-    #down_url "http://mirrors.kernel.org/archlinux/iso/2013.07.01/archlinux-2013.07.01-dual.iso"
-    #down_url "http://www.gtlib.gatech.edu/pub/archlinux/iso/2013.07.01/archlinux-2013.07.01-dual.iso"
+    #down_url "http://mirrors.kernel.org/archlinux/iso/2014.02.01/archlinux-2014.02.01-dual.iso"
+    #down_url "http://www.gtlib.gatech.edu/pub/archlinux/iso/2014.02.01/archlinux-2014.02.01-dual.iso"
 
     #down_url  "http://archive.ubuntu.com/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso" "ubuntu-mini-amd64-quantal.iso"
     #down_url "http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso" "ubuntu-mini-amd64-quantal.iso"
@@ -2029,9 +2104,10 @@ test_down_some_iso () {
     #tftp_setup_pxe_iso "http://ftp.halifax.rwth-aachen.de/backtrack/BT5R3-KDE-32.iso"
     #tftp_setup_pxe_iso "http://archive-5.kali.org/kali-images/kali-linux-1.0.4-i386.iso"
     #tftp_setup_pxe_iso "http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso"
+    #tftp_setup_pxe_iso "http://cdimage.kali.org/kali-latest/amd64/kali-linux-1.0.6-amd64.iso"
 
-    #tftp_setup_pxe_iso "http://ftp.ticklers.org/releases.ubuntu.org/releases//raring/ubuntu-13.04-desktop-i386.iso"
-    #tftp_setup_pxe_iso "http://gb.releases.ubuntu.com//raring/ubuntu-13.04-desktop-amd64.iso"
+    #tftp_setup_pxe_iso "http://ftp.ticklers.org/releases.ubuntu.org/releases/saucy/ubuntu-13.10-desktop-amd64.iso"
+    #tftp_setup_pxe_iso "http://us.releases.ubuntu.com/saucy/ubuntu-13.10-desktop-amd64.iso"
     # http://www.archive.ubuntu.com/ubuntu/dists/precise/main/installer-i386/current/images/netboot/non-pae/mini.iso
     #http://us.releases.ubuntu.com/raring/ubuntu-13.04-server-i386.iso
 
