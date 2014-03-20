@@ -192,6 +192,7 @@ BEGIN {
             case "i686":
                 dist_arch = "i686";
                 break;
+            case "livecd":
             case "live":
                 flg_live = 1;
                 break;
@@ -506,6 +507,7 @@ BEGIN {
             case "i686":
                 dist_arch = "i686";
                 break;
+            case "livecd":
             case "live":
                 flg_live = 1;
                 break;
@@ -1132,6 +1134,11 @@ tftp_setup_pxe_iso () {
             fi
         fi
         ;;
+    "centos")
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
     "fedora")
         if [ "${FLG_LIVE}" = "1" ]; then
             DIST_TYPE="live"
@@ -1503,8 +1510,15 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/images/pxeboot/vmlinuz"
             ;;
+        "desktop"|"live")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
+            TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
+            ;;
         *)
-            echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
+            echo "[ERR] Not supported centos type: ${DIST_TYPE}" >> "/dev/stderr"
             exit 0
             ;;
         esac
@@ -2080,6 +2094,11 @@ fi
 
 #rm -f "${FN_TMP_LIST}"
 echo "Done!" >> "/dev/stderr"
+echo "Don't forget to add these lines to your DHCP server config file:"
+echo "    next-server ${DIST_NFSIP};"
+echo '    filename "/netboot/pxelinux.0"';
+echo "and restart your DHCP server!"
+
 
 cat "${FN_TMP_LASTMSG}" >> "/dev/stderr"
 if [ "${FLG_NON_PAE}" = "1" ]; then
@@ -2115,4 +2134,5 @@ test_down_some_iso () {
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-minimal.iso
     #http://mirror.anl.gov/pub/centos/6.4/isos/x86_64/CentOS-6.4-x86_64-netinstall.iso
     #http://sourceforge.net/projects/clonezilla/files/clonezilla_live_alternative_testing/20131216-trusty/clonezilla-live-20131216-trusty-i386.iso
+    #http://mirror.anl.gov/pub/centos/6.5/isos/x86_64/CentOS-6.5-x86_64-minimal.iso
 }

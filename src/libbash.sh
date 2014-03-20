@@ -190,7 +190,7 @@ install_package () {
         if [ "$i" = "gawk" ]; then
             if [ "$OSTYPE" = "RedHat" ]; then
                 echo "[DBG] patch gawk to support 'switch'"
-                echo | gawk '{a = 1; switch(a) { case 0: break; } }'
+                echo | awk '{a = 1; switch(a) { case 0: break; } }'
                 if [ $? = 1 ]; then
                     FLG_GAWK_RH=1
                     PKG="rpmdevtools libsigsegv-devel readline-devel"
