@@ -142,6 +142,13 @@ BEGIN {
             case "ubuntu":
                 dist_name = "ubuntu";
                 break;
+            case "edubuntu":
+                dist_name = "edubuntu";
+                dist_type="desktop";
+                break;
+            case "doudoulinux":
+                dist_name = "doudoulinux";
+                break;
             case "centos":
                 dist_name = "centos";
                 break;
@@ -456,6 +463,13 @@ BEGIN {
                 break;
             case "ubuntu":
                 dist_name = "ubuntu";
+                break;
+            case "edubuntu":
+                dist_name = "edubuntu";
+                dist_type="desktop";
+                break;
+            case "doudoulinux":
+                dist_name = "doudoulinux";
                 break;
             case "centos":
                 dist_name = "centos";
@@ -1187,6 +1201,14 @@ tftp_setup_pxe_iso () {
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/gentoo"
             ;;
 
+    "doudoulinux")
+        # debian based live cd
+        FLG_NFS=1
+        TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
+        TFTP_APPEND_NFS="root=/dev/nfs boot=live config netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}  locales=zh_CN.UTF-8 nox11autologin splash nomodeset video=uvesafb:mode_option=640x480-16,mtrr=3,scroll=ywrap live-media=removable persistent persistent-subtext=doudoulinux username=tux hostname=doudoulinux  quiet"
+        #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+        TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
+        ;;
     "debian")
         echo "[DBG] dist debian" >> "/dev/stderr"
         case "$DIST_TYPE" in
@@ -1206,7 +1228,7 @@ tftp_setup_pxe_iso () {
         esac
         ;;
 
-    "ubuntu")
+    "ubuntu"|"edubuntu")
         echo "[DBG] dist ubuntu" >> "/dev/stderr"
         case "$DIST_TYPE" in
         "server") # server, alternate
