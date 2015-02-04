@@ -141,6 +141,52 @@ ospkgset nfs-common         nfs-utils           nfs-utils
 ospkgset bind9              bind                bind
 ospkgset portmap            portmap             ""
 
+
+ospkgset apache2            httpd               apache
+#ospkgset apache2-mpm-prefork
+#ospkgset apache2-utils
+ospkgset libapache2-mod-php5 php-apache         php-apache
+ospkgset php5-common        php                 php-apache
+#ospkgset php5-cli           php
+#ospkgset php5-mcrypt
+#ospkgset php5-mysql         php-mysql
+#ospkgset php5-pgsql
+ospkgset php5-sqlite        php-sqlite          php-sqlite
+#ospkgset php5-dev
+#ospkgset php5-curl
+#ospkgset php5-idn
+ospkgset php5-imagick       php-imagick         php-imagick
+#ospkgset php5-imap
+#ospkgset php5-memcache
+#ospkgset php5-ps
+#ospkgset php5-pspell
+#ospkgset php5-recode
+#ospkgset php5-tidy
+#ospkgset php5-xmlrpc
+#ospkgset php5-xsl
+#ospkgset php5-json
+#ospkgset php5-gd            php-gd
+#ospkgset php5-snmp          php-snmp
+#ospkgset php-versioncontrol-svn
+#ospkgset php-pear           php-pear
+ospkgset snmp               net-snmp-utils      net-snmp
+ospkgset graphviz           graphviz            graphviz
+ospkgset php5-mcrypt        php-mcrypt          php-mcrypt
+ospkgset subversion         subversion          subversion
+ospkgset mysql-server       mysql-server        mariadb
+ospkgset mysql-client       mysql               mariadb-clients
+#ospkgset mysql-perl         ?                   perl-dbd-mysql
+#ospkgset rrdtool            rrdtool
+#ospkgset fping              fping
+ospkgset imagemagick        ImageMagick         imagemagick
+ospkgset whois              jwhois              whois
+ospkgset mtr-tiny           mtr                 mtr
+ospkgset nmap               nmap                nmap
+ospkgset ipmitool           ipmitool            ipmitool
+ospkgset python-mysqldb     MySQL-python        mysql-python
+
+
+
 # compile gawk with switch support
 # and install to system
 # WARNING: the CentOS boot program depend the awk, and if the system upgrade the gawk again,
@@ -253,7 +299,7 @@ install_package () {
         ;;
 
     Arch)
-        INST_OPTS="-Syu"
+        INST_OPTS="-S"
         # install loop module
         lsmod | grep loop
         if [ "$?" != "0" ]; then

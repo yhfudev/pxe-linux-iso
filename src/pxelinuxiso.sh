@@ -10,6 +10,9 @@
 # Copyright 2013 Yunhui Fu <yhfudev@gmail.com>
 # License: GPL v3.0 or later
 
+# TODO:
+#  1) low case the file name, otherwise the tftp server won't work
+
 #DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
 DN_EXEC="$(dirname $(readlink -f "$0"))"
 if [ ! "${DN_EXEC}" = "" ]; then
@@ -1015,6 +1018,51 @@ EOF
     $MYEXEC cp /tmp/pxelinuxiso-tftpboot ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
 }
 
+
+
+# detect the pxe booting files
+detect_file () {
+    #${DIST_MOUNTPOINT}/casper/vmlinuz
+    PARAM_MNTPNT="$1"
+    shift
+    PARAM_PREFIX="$1"
+    shift
+    PARAM_LIST="$1"
+    shift
+    FLG_FOUND=0
+    OUT=
+    for i in ${PARAM_LIST} ; do
+        A=$(find "${PARAM_MNTPNT}/$i/" -name "${PARAM_PREFIX}*" | head -n 1)
+        if [ -f "${A}" ]; then
+            FLG_FOUND=1
+            OUT="${A}"
+            break
+        fi
+    done
+    if [ -f "${OUT}" ]; then
+        echo "${OUT}"
+    fi
+}
+
+detect_vmlinu_initrd () {
+    PARAM_MNTPNT="$1"
+    shift
+    PARAM_DIST_FILE="$1"
+    shift
+    PARAM_TFTP_ROOT="$1"
+    shift
+    # automaticly check the name of the 'vmlinuz'
+    $MYEXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
+    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" 'casper boot live isolinux' )
+    TFTP_KERNEL="${A}"
+    #echo "[INFO] KERNEL:${TFTP_KERNEL}" >> /dev/stderr
+    A=$(detect_file "${PARAM_MNTPNT}" "initrd" 'casper boot live isolinux' )
+    TFTP_APPEND_INITRD="${A}"
+    #echo "[INFO] initrd:${TFTP_APPEND_INITRD}" >> /dev/stderr
+    $MYEXEC umount "${PARAM_DIST_FILE}"
+    echo "${TFTP_KERNEL} ${TFTP_APPEND_INITRD}"
+}
+
 FN_TMP_ETCEXPORTS="/tmp/pxelinuxiso-etcexports"
 FN_TMP_ETCFSTAB="/tmp/pxelinuxiso-etcfstab"
 FN_TMP_TFTPMENU="/tmp/pxelinuxiso-tftpmenu"
@@ -1208,7 +1256,15 @@ tftp_setup_pxe_iso () {
         TFTP_APPEND_NFS="root=/dev/nfs boot=live config netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}  locales=zh_CN.UTF-8 nox11autologin splash nomodeset video=uvesafb:mode_option=640x480-16,mtrr=3,scroll=ywrap live-media=removable persistent persistent-subtext=doudoulinux username=tux hostname=doudoulinux  quiet"
         #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
         TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
+
+        # automaticly check the name of the 'vmlinuz'
+        A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+        B=$(echo ${A} | awk '{print $1}' )
+        TFTP_KERNEL="KERNEL ${B}"
+        B=$(echo ${A} | awk '{print $2}' )
+        TFTP_APPEND_INITRD="initrd=${B}"
         ;;
+
     "debian")
         echo "[DBG] dist debian" >> "/dev/stderr"
         case "$DIST_TYPE" in
@@ -1293,18 +1349,11 @@ tftp_setup_pxe_iso () {
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            $MYEXEC mount -o loop,utf8 "${DIST_FILE}" "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/vmlinuz" ]; then
-                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/" -name "vmlinu*" ) ; do
-                    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/$(basename $i)"
-                done
-            fi
-            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/initrd.lz" ]; then
-                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/casper/" -name "initrd*" ) ; do
-                    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/$(basename $i)"
-                done
-            fi
-            $MYEXEC umount "${DIST_FILE}"
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            B=$(echo ${A} | awk '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+            B=$(echo ${A} | awk '{print $2}' )
+            TFTP_APPEND_INITRD="initrd=${B}"
 
             if [ "${FLG_NON_PAE}" = "1" ]; then
               URL_VMLINUZ=
@@ -1527,10 +1576,16 @@ EOF
         "net")
             # netinstall
             FLG_NFS=0
-            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/images/pxeboot/initrd.img"
+
             TFTP_APPEND_NFS=""
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/images/pxeboot/vmlinuz"
+
+            # automaticly check the name of the 'vmlinuz'
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            B=$(echo ${A} | awk '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+            B=$(echo ${A} | awk '{print $2}' )
+            TFTP_APPEND_INITRD="initrd=${B}"
             ;;
         "desktop"|"live")
             FLG_NFS=1
@@ -1681,6 +1736,7 @@ LABEL ${TFTP_TAG_LABEL}_iso
     INITRD downloads/${ISO_NAME}
     APPEND iso raw
 EOF
+        # FIXME: the iso file has to be the real file, and should exists at the same folder as pxelinux.0
     fi
 
     if [ "${FLG_MOUNT}" = "1" ]; then
