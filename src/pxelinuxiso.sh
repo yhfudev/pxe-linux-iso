@@ -1305,6 +1305,9 @@ tftp_setup_pxe_iso () {
                 done
             fi
 
+            # for 12 or later
+            TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/install/filesystem.squashfs"
+
             if [ "${FLG_NON_PAE}" = "1" ]; then
 
 #TFTP_ROOT="/home/yhfu/homegw/var/lib/tftpboot"
