@@ -53,322 +53,12 @@ esac
 FN_AWK_DET_ISO="/tmp/pxelinuxiso-detlinuxiso.awk"
 FN_AWK_DET_URL="/tmp/pxelinuxiso-detlinuxurl.awk"
 
-gen_detect_iso_script () {
-cat << EOF > "${FN_AWK_DET_ISO}"
-#!/usr/bin/awk
-# try to guess the linux distribution from ISO file name
-# Copyright 2013 Yunhui Fu
-# License: GPL v3.0 or later
-
-BEGIN {
-    FN_OUTPUT=FNOUT
-    if ("" == FN_OUTPUT) {
-        FN_OUTPUT="guess-linux-dist-output-iso"
-        print "[DBG] Waring: use the default output file name: " FN_OUTPUT;
-        print "[DBG]         please specify the output file name via 'awk -v FNOUT=outfile'";
-    }
-    flg_live=0;
-    flg_nfs=0;
-    dist_release="";
-    dist_name="";
-    dist_arch="";
-    dist_type="net";
-}
-{
-    split (\$0, a, "-");
-    split (a[length(a)], b, ".");
-    #print "[DBG] len(b)=" length(b);
-    #print "[DBG] last(a)=" a[length(a)];
-    #print "[DBG] last(b)=" b[length(b)];
-    if (length(b) > 1) {
-        #print "[DBG] last?, len(b)=" length(b);
-        c = "";
-        for (i = 1; i < length(b); i ++) {
-            c = c b[i];
-        }
-        #print "[DBG] c=" c;
-        a[length(a)]=c;
-    }
-    for (i = 1; i <= length(a); i ++) {
-        switch (a[i]) {
-        case "BT5":
-            dist_name = "backtrack";
-            dist_release = 5;
-            dist_type="live";
-            break;
-        case "BT5R1":
-            dist_name = "backtrack";
-            dist_release = "5r1";
-            dist_type="live";
-            break;
-        case "BT5R2":
-            dist_name = "backtrack";
-            dist_release = "5r2";
-            dist_type="live";
-            break;
-        case "BT5R3":
-            dist_name = "backtrack";
-            dist_release = "5r3";
-            dist_type="live";
-            break;
-        case "bt4":
-            dist_name = "backtrack";
-            dist_release = "4";
-            dist_type="oldlive";
-            dist_arch = "i386";
-            break;
-
-        # tinycorelinux.net
-        case "Core":
-            dist_name = "tinycore";
-            dist_type="core";
-            dist_arch = "x86";
-            break;
-        case "TinyCore":
-            dist_name = "tinycore";
-            dist_type="tiny";
-            dist_arch = "x86";
-            break;
-        case "CorePlus":
-            dist_name = "tinycore";
-            dist_type="plus";
-            dist_arch = "x86";
-            break;
-
-        default:
-            lstr = tolower (a[i]);
-            #print "[DBG] lstr=" lstr;
-            switch (lstr) {
-            case "debian":
-                dist_name = "debian";
-                break;
-            case "ubuntu":
-                dist_name = "ubuntu";
-                break;
-            case "edubuntu":
-                dist_name = "edubuntu";
-                dist_type="desktop";
-                break;
-            case "doudoulinux":
-                dist_name = "doudoulinux";
-                break;
-            case "centos":
-                dist_name = "centos";
-                break;
-            case "fedora":
-                dist_name = "fedora";
-                break;
-            case "archlinux":
-                dist_name = "arch";
-                break;
-            case "linuxmint":
-                dist_name = "mint";
-                break;
-            case "clonezilla":
-                dist_name = "clonezilla";
-                dist_type="live";
-                break;
-            case "kali":
-                dist_name = "kali";
-                dist_type="net";
-                break;
-            case "beini":
-                dist_name = "beini";
-                dist_type = "live";
-                dist_arch = "x86";
-                break;
-            case "puppy":
-                dist_name = "puppy";
-                dist_type = "live";
-                break;
-            case "veket":
-                dist_name = "veket";
-                dist_type = "live";
-                break;
-            case "x86_64":
-                dist_arch = "x86_64";
-                break;
-            case "64bit":
-            case "amd64":
-                dist_arch = "amd64";
-                break;
-            case "x86":
-                dist_arch = "x86";
-                break;
-            case "32bit":
-            case "i386":
-                dist_arch = "i386";
-                break;
-            case "i686":
-                dist_arch = "i686";
-                break;
-            case "livecd":
-            case "live":
-                flg_live = 1;
-                break;
-            case "desktop":
-                dist_type="desktop";
-                flg_nfs=1;
-                break;
-            case "server":
-            case "alternate":
-                dist_type="server";
-                flg_nfs=1;
-                break;
-            # CentOS: netinstall
-            case "netinstall":
-                dist_type="net";
-                break;
-            case "netinst":
-                dist_type="net";
-                break;
-            # CentOS: minimal
-            case "minimal":
-                dist_type="server";
-                flg_nfs=1;
-                break;
-            # Ubuntu: mini
-            case "mini":
-                dist_type="net";
-                flg_nfs=1;
-                break;
-            # Arch: dual
-            case "dual":
-                dist_type="net";
-                dist_arch = "dual";
-                flg_nfs=1;
-                break;
-            # tinycore
-            case "current":
-                if (match(dist_name, /tinycore/)) {
-                    dist_release = "4.7.7";
-                }
-                break;
-
-            case "testing":
-            case "stable":
-                break;
-            # kali: linux
-            case "linux":
-            # BT: final
-            case "final":
-            # BT: KDE
-            case "kde":
-            case "gnome":
-                # ignore
-                print "[DBG] ignore key=" a[i];
-                break;
-
-            default:
-                flg_ignore=1
-                if (match(lstr, /amd64/)) {
-                    dist_arch = "amd64";
-                    flg_ignore=0
-                    #print "[DBG] set arch=" dist_arch;
-                } else if (match(lstr, /64bit/)) {
-                    dist_arch = "amd64";
-                    flg_ignore=0
-                } else if (match(lstr, /i386/)) {
-                    dist_arch = "i386";
-                    flg_ignore=0
-                } else if (match(lstr, /32bit/)) {
-                    dist_arch = "i386";
-                    flg_ignore=0
-                    #print "[DBG] set arch=" dist_arch;
-                }
-                if ("debian" == dist_name) {
-                    if (match(lstr, /squeeze/)) {
-                        dist_release = "6.0.7";
-                        flg_ignore=0
-                    } else if (match(lstr, /wheezy/)) {
-                        dist_release = "7.1";
-                        flg_ignore=0
-                    } else if (match(lstr, /jessie/)) {
-                        dist_release = "testing";
-                        flg_ignore=0
-                    } else if (match(lstr, /sid/)) {
-                        dist_release = "unstable";
-                        flg_ignore=0
-                    } else {
-                        # if all is digit or .
-                        if (match(lstr, /^[0-9\.]+$/)) {
-                            dist_release = lstr;
-                            flg_ignore=0
-                            #print "[DBG] set release=" dist_release;
-                        }
-                    }
-                } else if ("ubuntu" == dist_name) {
-                    if (match(lstr, /lucid/)) {
-                        dist_release = "10.04";
-                        flg_ignore=0
-                    } else if (match(lstr, /precise/)) {
-                        dist_release = "12.04";
-                        flg_ignore=0
-                    } else if (match(lstr, /quantal/)) {
-                        dist_release = "12.10";
-                        flg_ignore=0
-                    } else if (match(lstr, /raring/)) {
-                        dist_release = "13.04";
-                        flg_ignore=0
-                    } else if (match(lstr, /saucy/)) {
-                        dist_release = "14.04";
-                        flg_ignore=0
-                    } else {
-                        # if all is digit or .
-                        if (match(lstr, /^[0-9\.]+$/)) {
-                            dist_release = lstr;
-                            flg_ignore=0
-                            #print "[DBG] set release=" dist_release;
-                        }
-                    }
-                } else {
-                    if ("" == dist_release) {
-                        #print "[DBG] fill release=" lstr;
-                        dist_release=lstr;
-                        flg_ignore=0
-                    } else if ("" == dist_arch) {
-                        #print "[DBG] fill arch=" lstr;
-                        if ("64" == lstr) {
-                            dist_arch = "amd64";
-                            flg_ignore=0
-                        } else {
-                            dist_arch = "i386";
-                            flg_ignore=0
-                        }
-                    }
-                    #print "[DBG] set arch=" dist_arch;
-                }
-                if (flg_ignore) {
-                    print "[DBG] ignore key=" a[i];
-                }
-                break;
-            }
-            break;
-        }
-    }
-}
-
-END {
-    print "[DBG]" \
-        " name=" (""==dist_name?"unknown":dist_name) \
-        " release=" (""==dist_release?"unknown":dist_release) \
-        " arch=" (""==dist_arch?"unknown":dist_arch) \
-        " type=" (""==dist_type?"unknown":dist_type) \
-        (flg_live==0?"":"(Live)") \
-        (flg_nfs==0?"":"(NFS)") \
-        ;
-    print "DECLNXOUT_NAME="      dist_name       >  FN_OUTPUT
-    print "DECLNXOUT_RELEASE="   dist_release    >> FN_OUTPUT
-    print "DECLNXOUT_ARCH="      dist_arch       >> FN_OUTPUT
-    print "DECLNXOUT_TYPE="      dist_type       >> FN_OUTPUT
-    print "DECLNXOUT_FLG_LIVE="  flg_live        >> FN_OUTPUT
-    print "DECLNXOUT_FLG_NFS="   flg_nfs         >> FN_OUTPUT
-}
-EOF
-}
-
-gen_detect_url_script () {
-cat << EOF > "${FN_AWK_DET_URL}"
+gen_detect_urliso_script () {
+    PARAM_FN_AWK=$1
+    if [ "${PARAM_FN_AWK}" = "" ]; then
+        PARAM_FN_AWK="${FN_AWK_DET_URL}"
+    fi
+    cat << EOF > "${PARAM_FN_AWK}"
 #!/usr/bin/awk
 # try to guess the linux distribution from download URL
 # Copyright 2013 Yunhui Fu
@@ -389,7 +79,12 @@ BEGIN {
     dist_type="net";
 }
 {
-    split (\$0, a, "/");
+    if (TYP == iso) {
+        split (\$0, a, "-");
+    } else {
+        # url
+        split (\$0, a, "/");
+    }
     split (a[length(a)], b, ".");
     #print "[DBG] len(b)=" length(b);
     #print "[DBG] last(a)=" a[length(a)];
@@ -445,16 +140,19 @@ BEGIN {
             dist_name = "tinycore";
             dist_release = "4.7.7";
             dist_type="core";
+            dist_arch = "x86";
             break;
         case "TinyCore":
             dist_name = "tinycore";
             dist_release = "4.7.7";
             dist_type="tiny";
+            dist_arch = "x86";
             break;
         case "CorePlus":
             dist_name = "tinycore";
             dist_release = "4.7.7";
             dist_type="plus";
+            dist_arch = "x86";
             break;
 
         default:
@@ -492,7 +190,7 @@ BEGIN {
                 break;
             case "kali":
                 dist_name = "kali";
-                dist_type="net";
+                dist_type="live";
                 break;
             case "beini":
                 dist_name = "beini";
@@ -582,6 +280,7 @@ BEGIN {
             case "gnome":
             case "http:":
                 # ignore
+                print "[DBG] ignore key=" a[i];
                 break;
 
             default:
@@ -721,12 +420,12 @@ detect_linux_dist () {
     FN_SINGLE=$(basename "${PARAM_URL2}")
     #URL2BASE=$(dirname "${PARAM_URL2}")
 
-    gen_detect_iso_script
-    echo "${FN_SINGLE}" | awk -v FNOUT=/tmp/pxelinuxiso-out-iso -f "${FN_AWK_DET_ISO}"
+    gen_detect_urliso_script
+    echo "${FN_SINGLE}" | awk -v TYP=iso -v FNOUT=/tmp/pxelinuxiso-out-iso -f "${FN_AWK_DET_ISO}"
     _detect_export_values "/tmp/pxelinuxiso-out-iso"
     if [ "${DECLNXOUT_NAME}" = "" ]; then
-        gen_detect_url_script
-        echo "${PARAM_URL2}" | awk -v FNOUT=/tmp/pxelinuxiso-out-url -f "${FN_AWK_DET_URL}"
+        gen_detect_urliso_script
+        echo "${PARAM_URL2}" | awk -v TYP=url -v FNOUT=/tmp/pxelinuxiso-out-url -f "${FN_AWK_DET_URL}"
         _detect_export_values "/tmp/pxelinuxiso-out-url"
     fi
 }
@@ -1226,7 +925,6 @@ tftp_setup_pxe_iso () {
 
     "kali")
         echo "[DBG] dist kali" >> "/dev/stderr"
-        DIST_TYPE="live"
         ;;
     "beini")
         DIST_NAME_TYPE="tinycore"
@@ -1479,6 +1177,10 @@ EOF
     "kali")
         echo "[DBG] dist kali" >> "/dev/stderr"
         case "$DIST_TYPE" in
+        "net")
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/initrd.gz"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/linux"
+            ;;
         "live")
             FLG_NFS=0
             # ISO: it's not feasible, the size of iso is larger than 2 GB.
@@ -2090,12 +1792,21 @@ fi
 
 echo "[DBG] Install basic software packages ..."
 
-install_package gawk
+EXEC_AWK="$(which gawk)"
+if [ ! -x "${EXEC_AWK}" ]; then
+  install_package gawk
+fi
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
   echo "[ERR] Not exist awk!" >> "/dev/stderr"
   exit 1
 fi
+echo | awk '{a = 1; switch(a) { case 0: break; } }'
+if [ $? = 1 ]; then
+  # patch gawk
+  install_package gawk
+fi
+
 
 EXEC_WGET="$(which wget)"
 if [ ! -x "${EXEC_WGET}" ]; then
@@ -2109,7 +1820,11 @@ if [ ! -x "${EXEC_WGET}" ]; then
   exit 1
 fi
 
-install_package coreutils
+EXEC_ENV="$(which env)"
+if [ ! -x "${EXEC_ENV}" ]; then
+  echo "[DBG] Try to install coreutils." >> "/dev/stderr"
+  install_package coreutils
+fi
 
 tftp_init_directories
 if [ "${FLG_INIT_TFTPROOT}" = "1" ]; then
