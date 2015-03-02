@@ -79,30 +79,41 @@ BEGIN {
     dist_type="net";
 }
 {
-    if (TYP == iso) {
-        split (\$0, a, "-");
-    } else {
-        # url
-        split (\$0, a, "/");
-    }
+    # process url, such as "http://sample.com/path/to/unix-i386.iso"
+    split (\$0, a, "/");
+
+    # remove the last '.iso'
     split (a[length(a)], b, ".");
     #print "[DBG] len(b)=" length(b);
     #print "[DBG] last(a)=" a[length(a)];
     #print "[DBG] last(b)=" b[length(b)];
     if (length(b) > 1) {
         #print "[DBG] last?, len(b)=" length(b);
-        c = "";
-        for (i = 1; i < length(b); i ++) {
-            c = c b[i];
+        c = b[1];
+        for (i = 2; i < length(b); i ++) {
+            c = c "." b[i];
         }
         #print "[DBG] c=" c;
         a[length(a)]=c;
     }
+
+    # process the file name, split with '-'
+    split (a[length(a)], b, "-");
+    if (length(b) > 1) {
+        pos = length(a);
+        for (i = 1; i <= length(b); i ++) {
+            a[pos] = b[i];
+            pos ++;
+        }
+    }
+
+    # skip 'http://sample.com/'
     i = 1;
     if (match(a[1], /[~:]*:/)) {
         i = 4;
-        #print "[DBG] skip to " i;
+        print "[DBG] skip to " i;
     }
+
     for (; i <= length(a); i ++) {
         switch (a[i]) {
         case "":
@@ -157,7 +168,7 @@ BEGIN {
 
         default:
             lstr = tolower (a[i]);
-            #print "[DBG] lstr=" lstr;
+            print "[DBG] lstr=" lstr;
             switch (lstr) {
             case "debian":
                 dist_name = "debian";
@@ -190,7 +201,8 @@ BEGIN {
                 break;
             case "kali":
                 dist_name = "kali";
-                dist_type="live";
+                dist_type = "live";
+                print "[DBG] change kali value: dist_name=" dist_name "; dist_type=" dist_type
                 break;
             case "beini":
                 dist_name = "beini";
@@ -373,14 +385,14 @@ BEGIN {
 }
 
 END {
-    #print "[DBG]" \
-        #" name=" (""==dist_name?"unknown":dist_name) \
-        #" release=" (""==dist_release?"unknown":dist_release) \
-        #" arch=" (""==dist_arch?"unknown":dist_arch) \
-        #" type=" (""==dist_type?"unknown":dist_type) \
-        #(flg_live==0?"":"(Live)") \
-        #(flg_nfs==0?"":"(NFS)") \
-        #;
+    print "[DBG]" \
+        " name=" (""==dist_name?"unknown":dist_name) \
+        " release=" (""==dist_release?"unknown":dist_release) \
+        " arch=" (""==dist_arch?"unknown":dist_arch) \
+        " type=" (""==dist_type?"unknown":dist_type) \
+        (flg_live==0?"":"(Live)") \
+        (flg_nfs==0?"":"(NFS)") \
+        ;
     print "DECLNXOUT_NAME="      dist_name       >  FN_OUTPUT
     print "DECLNXOUT_RELEASE="   dist_release    >> FN_OUTPUT
     print "DECLNXOUT_ARCH="      dist_arch       >> FN_OUTPUT
@@ -420,13 +432,16 @@ detect_linux_dist () {
     FN_SINGLE=$(basename "${PARAM_URL2}")
     #URL2BASE=$(dirname "${PARAM_URL2}")
 
-    gen_detect_urliso_script
-    echo "${FN_SINGLE}" | awk -v TYP=iso -v FNOUT=/tmp/pxelinuxiso-out-iso -f "${FN_AWK_DET_ISO}"
-    _detect_export_values "/tmp/pxelinuxiso-out-iso"
+    echo "[DBG] FN_SINGLE=${FN_SINGLE}"
+
+    FN_TMP=/tmp/pxelinuxiso-out-iso
+    gen_detect_urliso_script "${FN_AWK_DET_ISO}"
+    echo "${FN_SINGLE}" | awk -v TYP=iso -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_ISO}"
+    _detect_export_values "${FN_TMP}"
     if [ "${DECLNXOUT_NAME}" = "" ]; then
-        gen_detect_urliso_script
-        echo "${PARAM_URL2}" | awk -v TYP=url -v FNOUT=/tmp/pxelinuxiso-out-url -f "${FN_AWK_DET_URL}"
-        _detect_export_values "/tmp/pxelinuxiso-out-url"
+        gen_detect_urliso_script "${FN_AWK_DET_URL}"
+        echo "${PARAM_URL2}" | awk -v TYP=url -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_URL}"
+        _detect_export_values "${FN_TMP}"
     fi
 }
 ############################################################
@@ -1178,6 +1193,7 @@ EOF
         echo "[DBG] dist kali" >> "/dev/stderr"
         case "$DIST_TYPE" in
         "net")
+            FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/initrd.gz"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/linux"
             ;;
@@ -1192,6 +1208,9 @@ EOF
             TFTP_APPEND_NFS="noconfig=sudo username=root hostname=kali root=/dev/nfs boot=live netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
 
+            FLG_DOWNKALIFIX=0
+            FN_INITRD=
+            URL_INITRD=
             $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/kali1-fix/"
             case "$DIST_RELEASE" in
             "1.0.3")
@@ -1217,12 +1236,29 @@ EOF
 
             "1.0.4")
                 FLG_NFS=1
+                FLG_DOWNKALIFIX=1
                 if [ "${DIST_ARCH}" = "i386" ]; then
                     FN_INITRD=initrd-kali-1.0.4-3.7-trunk-686-pae.img
                 else
                     FN_INITRD=initrd-kali-1.0.4-3.7-trunk-amd64.img
                 fi
                 URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
+                echo "[DBG] kali 1.0.4, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
+                ;;
+
+            #"1.1.0")
+                #FLG_NFS=1
+                #FLG_DOWNKALIFIX=1
+                #if [ "${DIST_ARCH}" = "i386" ]; then
+                    #FN_INITRD=initrd-kali-1.1.0-3.18.0-kali1-686-pae.img
+                #else
+                    #FN_INITRD=initrd-kali-1.1.0-3.18.0-kali1-amd64.img
+                #fi
+                #URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
+                #echo "[DBG] kali 1.1.0, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
+                #;;
+            esac
+            if [ "${FLG_DOWNKALIFIX}" = "1" ]; then
                 echo "[WARNING] Use the ${DIST_ARCH} patch from" >> "/dev/stderr"
                 echo "[WARNING]     ${URL_INITRD}" >> "/dev/stderr"
 
@@ -1246,8 +1282,7 @@ EOF
 #lb build
 
                 fi
-                ;;
-            esac
+            fi
             ;;
         esac
         ;;
@@ -1345,7 +1380,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
             #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
             TFTP_MENU_LABEL="${TFTP_MENU_LABEL} (x86_64)"
-            
+
             # or http?
             # TFTP_APPEND_NFS="archisobasedir=arch archiso_pxe_http=${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
         ;;
@@ -1545,7 +1580,8 @@ EOF
         #$MYEXEC service nfs restart   # RedHat/CentOS
         #$MYEXEC systemctl restart rpc-idmapd.service
         #$MYEXEC systemctl restart rpc-mountd.service
-        $MYEXEC exportfs -arv
+        #$MYEXEC exportfs -arv
+        $MYEXEC systemctl restart rpcbind nfs-server
     fi
 
     # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
