@@ -1303,7 +1303,7 @@ EOF
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
-            TFTP_APPEND_INITRD="initrd=${B} live:http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img"
+            TFTP_APPEND_INITRD="initrd=${B} repo=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/ live:http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img"
             ;;
         *)
             echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
