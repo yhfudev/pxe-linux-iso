@@ -1296,6 +1296,13 @@ EOF
             TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
+
+            # automaticly check the name of the 'vmlinuz'
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            B=$(echo ${A} | awk '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+            B=$(echo ${A} | awk '{print $2}' )
+            TFTP_APPEND_INITRD="initrd=${B}"
             ;;
         *)
             echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"

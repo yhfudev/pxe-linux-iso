@@ -36,6 +36,7 @@ detect_os_type () {
     test -e /etc/redhat-release && OSTYPE="RedHat"
     test -e /etc/fedora-release && OSTYPE="RedHat"
     which pacman && OSTYPE="Arch"
+    which opkg && OSTYPE="OpenWrt"
 
     OSDIST=
     OSVERSION=
@@ -63,6 +64,14 @@ detect_os_type () {
             OSNAME=arch
         fi
         ;;
+
+    OpenWrt)
+        if [ -f "/etc/os-release" ]; then
+            OSDIST=$(cat /etc/os-release | grep ^ID= | awk -F= '{print $2}')
+            OSVERSION=1
+            OSNAME=openwrt
+        fi
+        ;;
     *)
         echo "[ERR] Not supported OS: $OSTYPE"
         exit 0
@@ -70,9 +79,9 @@ detect_os_type () {
     esac
 
     if which lsb_release &> /dev/null; then
-        OSDIST=`lsb_release -is`
-        OSVERSION=`lsb_release -rs`
-        OSNAME=`lsb_release -cs`
+        OSDIST=$(lsb_release -is)
+        OSVERSION=$(lsb_release -rs)
+        OSNAME=$(lsb_release -cs)
     fi
     if [ "${OSDIST}" = "" ]; then
         echo "Error: Not found lsb_release!"
@@ -124,8 +133,11 @@ ospkgget () {
     hget "pkg_${PARAM_OS}_${PARAM_KEY}"
 }
 
-# Debian/Ubuntu, RedHat/Fedora/CentOS, Arch
-ospkgset apt-get            yum                 pacman
+# Debian/Ubuntu, RedHat/Fedora/CentOS, Arch, OpenWrt
+ospkgset apt-get            yum                 pacman              opkg
+ospkgset apt-file           yum                 pkgfile
+ospkgset u-boot-tools       uboot-tools         uboot-tools
+ospkgset mtd-utils          mtd-utils           mtd-utils
 ospkgset build-essential    build-essential     base-devel
 ospkgset lsb-release        redhat-lsb-core     redhat-lsb-core
 ospkgset openssh-client     openssh-clients     openssh-clients
@@ -140,6 +152,7 @@ ospkgset nfs-kernel-server  nfs-utils           nfs-utils
 ospkgset nfs-common         nfs-utils           nfs-utils
 ospkgset bind9              bind                bind
 ospkgset portmap            portmap             ""
+ospkgset libncurses-dev     libncurses-dev      ncurses
 
 
 ospkgset apache2            httpd               apache
@@ -222,6 +235,33 @@ patch_centos_gawk () {
     rm -rf ~/rpmbuild/BUILD/gawk-4.0.1/
 }
 
+# 对于非 x86 平台，如arm等，使用下载支持 x86 启动的syslinux
+download_extract_2tmp_syslinux () {
+    PKG=""
+    cd /tmp
+    DATE1=$(date +%Y-%m-%d)
+    rm -f index.html*
+    URL_ORIG="https://www.archlinux.org/packages/core/i686/syslinux/download/"
+    URL_REAL=$(wget --no-check-certificate ${URL_ORIG} 2>&1 | grep pkg | grep $DATE1 | awk '{print $3}')
+    FN_SYSLI=$(basename ${URL_REAL})
+    if [ ! -f "${FN_SYSLI}" ]; then
+        if [ ! -f index.html ]; then
+            echo "[ERR] not found downloaded file from ${URL_ORIG}(${URL_REAL})"
+        else
+            echo "[DBG] rename index.html to ${FN_SYSLI}"
+            mv index.html "${FN_SYSLI}"
+        fi
+    fi
+    if [ ! -f "${FN_SYSLI}" ]; then
+        echo "[ERR] not found file ${FN_SYSLI}"
+        exit 0
+    fi
+    tar -xf "${FN_SYSLI}"
+    cd -
+}
+
+# 安装软件包，使用debian 的发行名，自动转换成其他系统下的名字。
+# 如果是 gawk 或 syslinux 则判断处理
 install_package () {
     PARAM_NAME=$*
     INSTALLER=`ospkgget $OSTYPE apt-get`
@@ -259,28 +299,8 @@ install_package () {
 
                 *)
                     echo "[DBG] Arch $MACH yet another installation of $i"
-                    PKG=""
                     echo "[DBG] Download package for $MACH"
-                    cd /tmp
-                    DATE1=$(date +%Y-%m-%d)
-                    rm -f index.html*
-                    URL_ORIG="https://www.archlinux.org/packages/core/i686/syslinux/download/"
-                    URL_REAL=$(wget --no-check-certificate ${URL_ORIG} 2>&1 | grep pkg | grep $DATE1 | awk '{print $3}')
-                    FN_SYSLI=$(basename ${URL_REAL})
-                    if [ ! -f "${FN_SYSLI}" ]; then
-                        if [ ! -f index.html ]; then
-                            echo "[ERR] not found downloaded file from ${URL_ORIG}(${URL_REAL})"
-                        else
-                            echo "[DBG] rename index.html to ${FN_SYSLI}"
-                            mv index.html "${FN_SYSLI}"
-                        fi
-                    fi
-                    if [ ! -f "${FN_SYSLI}" ]; then
-                        echo "[ERR] not found file ${FN_SYSLI}"
-                        exit 0
-                    fi
-                    tar -xf "${FN_SYSLI}"
-                    cd -
+                    download_extract_2tmp_syslinux
                     ;;
                 esac
             fi
