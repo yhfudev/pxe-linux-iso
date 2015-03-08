@@ -767,10 +767,10 @@ detect_vmlinu_initrd () {
     shift
     # automaticly check the name of the 'vmlinuz'
     $MYEXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
-    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" 'casper boot live isolinux' )
+    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" 'images/pxeboot/ casper boot live isolinux' )
     TFTP_KERNEL="${A}"
     #echo "[INFO] KERNEL:${TFTP_KERNEL}" >> /dev/stderr
-    A=$(detect_file "${PARAM_MNTPNT}" "initrd" 'casper boot live isolinux' )
+    A=$(detect_file "${PARAM_MNTPNT}" "initrd" 'images/pxeboot/ casper boot live isolinux' )
     TFTP_APPEND_INITRD="${A}"
     #echo "[INFO] initrd:${TFTP_APPEND_INITRD}" >> /dev/stderr
     $MYEXEC umount "${PARAM_DIST_FILE}"
@@ -1291,9 +1291,10 @@ EOF
         echo "[DBG] dist fedora" >> "/dev/stderr"
         case "$DIST_TYPE" in
         "desktop"|"live")
-            FLG_NFS=1
+            #FLG_NFS=1
+            FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
-            TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
 
@@ -1302,7 +1303,7 @@ EOF
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
-            TFTP_APPEND_INITRD="initrd=${B}"
+            TFTP_APPEND_INITRD="initrd=${B} live:http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img"
             ;;
         *)
             echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
