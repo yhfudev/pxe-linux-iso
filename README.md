@@ -19,6 +19,15 @@ Supported Linux distribution CD/DVDs
   * puppy
   * doudoulinux
 
+Supported Linux platform
+------------------------
+
+This software can run on following systems:
+
+  * CentOS/Fedora
+  * Debian/Ubuntu
+  * Arch Linux
+
 Features
 --------
   * One single command line to setup a PXE entry to boot from CD/DVD
