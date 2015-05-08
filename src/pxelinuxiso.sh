@@ -192,6 +192,15 @@ BEGIN {
             case "archlinux":
                 dist_name = "arch";
                 break;
+            case "archassault":
+                dist_name = "archassault";
+                break;
+            case "blackarchlinux":
+                dist_name = "blackarchlinux";
+                break;
+            case "evolution":
+                dist_name = "evolution";
+                break;
             case "linuxmint":
                 dist_name = "mint";
                 break;
@@ -227,10 +236,10 @@ BEGIN {
             case "x86":
                 dist_arch = "x86";
                 break;
-            case "32bit":
             case "i386":
                 dist_arch = "i386";
                 break;
+            case "32bit":
             case "i686":
                 dist_arch = "i686";
                 break;
@@ -1198,7 +1207,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/linux"
             ;;
         "live")
-            FLG_NFS=0
+            FLG_NFS=1
             # ISO: it's not feasible, the size of iso is larger than 2 GB.
             #TFTP_APPEND_INITRD="iso raw"
             #TFTP_KERNEL="KERNEL memdisk\n    INITRD downloads/${ISO_NAME}"
@@ -1393,8 +1402,20 @@ EOF
             # TFTP_APPEND_NFS="archisobasedir=arch archiso_pxe_http=${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
         ;;
 
-    "tinycore")
+    "archassault"|"blackarchlinux"|"evolution")
+            #FLG_MOUNT=0
+            #echo "archassault|blackarchlinux|evolution is not support PXE?"
+            FLG_NFS=1
+            ITYPE="${DIST_ARCH}"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
+            TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_OTHER=""
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
+            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+        ;;
 
+    "tinycore")
         case "$DIST_TYPE" in
         "plus")
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/vmlinuz"
@@ -1527,7 +1548,10 @@ EOF
         read -rsn 1 -p "Press any key to continue..."
     fi
     #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
-    $MYEXEC install_package nfs-common nfs-kernel-server portmap
+    EXEC_NFSEXT=$(which exportfs)
+    if [ ! -e "${EXEC_NFSEXT}" ]; then
+        $MYEXEC install_package nfs-common nfs-kernel-server portmap
+    fi
 
     DN_PXEBACKUP="/etc/pxelinuxisobak/"
     mkdir -p "${DN_PXEBACKUP}"
