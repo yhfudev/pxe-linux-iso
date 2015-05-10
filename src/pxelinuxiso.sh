@@ -201,6 +201,12 @@ BEGIN {
             case "evolution":
                 dist_name = "evolution";
                 break;
+            case "manjaro":
+                dist_name = "manjaro";
+                break;
+            case "ctkarchlive":
+                dist_name = "ctkarchlive";
+                break;
             case "linuxmint":
                 dist_name = "mint";
                 break;
@@ -775,15 +781,18 @@ detect_vmlinu_initrd () {
     PARAM_TFTP_ROOT="$1"
     shift
     # automaticly check the name of the 'vmlinuz'
+    $MYEXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $MYEXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
-    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" 'images/pxeboot/ casper boot live isolinux' )
+    $MYEXEC cd "${PARAM_TFTP_ROOT}"
+    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" 'images/pxeboot/ casper boot boot/i686 boot/x86_64 boot/i586 live isolinux' )
     TFTP_KERNEL="${A}"
     #echo "[INFO] KERNEL:${TFTP_KERNEL}" >> /dev/stderr
-    A=$(detect_file "${PARAM_MNTPNT}" "initrd" 'images/pxeboot/ casper boot live isolinux' )
+    A=$(detect_file "${PARAM_MNTPNT}" "initrd" 'images/pxeboot/ casper boot boot/i686 boot/x86_64 boot/i586 live isolinux' )
     TFTP_APPEND_INITRD="${A}"
     #echo "[INFO] initrd:${TFTP_APPEND_INITRD}" >> /dev/stderr
     $MYEXEC umount "${PARAM_DIST_FILE}"
     echo "${TFTP_KERNEL} ${TFTP_APPEND_INITRD}"
+    $MYEXEC cd -
 }
 
 FN_TMP_ETCEXPORTS="/tmp/pxelinuxiso-etcexports"
@@ -1378,9 +1387,8 @@ EOF
             #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
             TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_APPEND_OTHER=""
+            TFTP_APPEND_OTHER="arch=i686"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
 
             cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}_i686
@@ -1410,9 +1418,13 @@ EOF
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
             TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
             TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_APPEND_OTHER=""
+            TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+
+            # automaticly check the name of the 'vmlinuz'
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            B=$(echo ${A} | awk '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
         ;;
 
     "tinycore")
