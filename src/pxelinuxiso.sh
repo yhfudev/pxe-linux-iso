@@ -185,6 +185,9 @@ BEGIN {
                 break;
             case "centos":
                 dist_name = "centos";
+            case "fuel":
+                dist_arch = "x86_64";
+                dist_name = "fuel";
                 break;
             case "fedora":
                 dist_name = "fedora";
@@ -760,34 +763,52 @@ detect_file () {
     shift
     FLG_FOUND=0
     OUT=
-    for i in ${PARAM_LIST} ; do
-        A=$(find "${PARAM_MNTPNT}/$i/" -name "${PARAM_PREFIX}*" | head -n 1)
+    if [ "" = "${PARAM_LIST}" ] ; then
+        A=$(find "${PARAM_MNTPNT}/" -name "${PARAM_PREFIX}*" | head -n 1)
         if [ -f "${A}" ]; then
             FLG_FOUND=1
             OUT="${A}"
-            break
         fi
-    done
+    else
+        for i in ${PARAM_LIST} ; do
+            A=$(find "${PARAM_MNTPNT}/$i/" -name "${PARAM_PREFIX}*" | head -n 1)
+            if [ -f "${A}" ]; then
+                FLG_FOUND=1
+                OUT="${A}"
+                break
+            fi
+        done
+    fi
     if [ -f "${OUT}" ]; then
         echo "${OUT}"
     fi
 }
 
+# the default search dirs
+DEFAULT_BOOTIMG_DIRS='images/pxeboot/ casper boot boot/i686 boot/x86_64 boot/i586 live install isolinux'
+
 detect_vmlinu_initrd () {
+    # mount point
     PARAM_MNTPNT="$1"
     shift
+    # the ISO file
     PARAM_DIST_FILE="$1"
     shift
+    # the root of tftp
     PARAM_TFTP_ROOT="$1"
     shift
+    # search dirs
+    PARAM_SEARCH_DIRS="$1"
+    shift
+
     # automaticly check the name of the 'vmlinuz'
     $MYEXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $MYEXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $MYEXEC cd "${PARAM_TFTP_ROOT}"
-    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" 'images/pxeboot/ casper boot boot/i686 boot/x86_64 boot/i586 live isolinux' )
+    A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" "${PARAM_SEARCH_DIRS}" )
     TFTP_KERNEL="${A}"
     #echo "[INFO] KERNEL:${TFTP_KERNEL}" >> /dev/stderr
-    A=$(detect_file "${PARAM_MNTPNT}" "initrd" 'images/pxeboot/ casper boot boot/i686 boot/x86_64 boot/i586 live isolinux' )
+    A=$(detect_file "${PARAM_MNTPNT}" "initrd" "${PARAM_SEARCH_DIRS}" )
     TFTP_APPEND_INITRD="${A}"
     #echo "[INFO] initrd:${TFTP_APPEND_INITRD}" >> /dev/stderr
     $MYEXEC umount "${PARAM_DIST_FILE}"
@@ -867,6 +888,7 @@ tftp_setup_pxe_iso () {
     export ISO_NAME=$(basename ${DIST_URL})
     if [ "${FLG_QUIT}" = "1" ]; then
         DIST_NAME="${ISO_NAME}"
+        DIST_NAME_TYPE=""
         DIST_RELEASE=""
         DIST_ARCH=""
         DIST_TYPE=""
@@ -989,7 +1011,7 @@ tftp_setup_pxe_iso () {
         TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
 
         # automaticly check the name of the 'vmlinuz'
-        A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+        A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
         B=$(echo ${A} | awk '{print $1}' )
         TFTP_KERNEL="KERNEL ${B}"
         B=$(echo ${A} | awk '{print $2}' )
@@ -1083,7 +1105,7 @@ tftp_setup_pxe_iso () {
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
@@ -1208,9 +1230,9 @@ EOF
         ;;
 
     "kali")
-        echo "[DBG] dist kali" >> "/dev/stderr"
+        echo "[DBG] dist kali, type=$DIST_TYPE" >> "/dev/stderr"
         case "$DIST_TYPE" in
-        "net")
+        "net"|"mini")
             FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/initrd.gz"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/linux"
@@ -1275,6 +1297,7 @@ EOF
                 #URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
                 #echo "[DBG] kali 1.1.0, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
                 #;;
+
             esac
             if [ "${FLG_DOWNKALIFIX}" = "1" ]; then
                 echo "[WARNING] Use the ${DIST_ARCH} patch from" >> "/dev/stderr"
@@ -1317,7 +1340,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
@@ -1347,7 +1370,7 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
@@ -1389,6 +1412,7 @@ EOF
             TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_OTHER="arch=i686"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
+            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
 
             cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}_i686
@@ -1422,7 +1446,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
         ;;
