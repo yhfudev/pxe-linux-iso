@@ -785,7 +785,7 @@ detect_file () {
 }
 
 # the default search dirs
-DEFAULT_BOOTIMG_DIRS='images/pxeboot/ casper boot boot/i686 boot/x86_64 boot/i586 live install isolinux'
+DEFAULT_BOOTIMG_DIRS='images/pxeboot/ casper live install isolinux boot boot/i686 boot/x86_64 boot/i586'
 
 detect_vmlinu_initrd () {
     # mount point
@@ -894,6 +894,65 @@ tftp_setup_pxe_iso () {
         DIST_TYPE=""
     fi
 
+    case "$DIST_NAME" in
+    "debian")
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        else
+            if [ "${DIST_TYPE}" = "net" ]; then
+                DIST_NAME_TYPE="ubuntu"
+            fi
+        fi
+        ;;
+    "centos")
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
+    "fedora")
+        DIST_TYPE="desktop"
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
+    "mint")
+        DIST_NAME_TYPE="ubuntu"
+        DIST_TYPE="desktop"
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
+
+    "backtrack")
+        case "$DIST_RELEASE" in
+        4)
+            DIST_TYPE="oldlive"
+            ;;
+        5)
+            DIST_TYPE="live"
+            ;;
+        esac
+        ;;
+
+    "beini")
+        DIST_NAME_TYPE="tinycore"
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
+    "veket")
+        DIST_NAME_TYPE="puppy"
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
+    *)
+        if [ "${FLG_LIVE}" = "1" ]; then
+            DIST_TYPE="live"
+        fi
+        ;;
+    esac
+
     # if we unable to get information correctly from the name
     #echo "[DBG] 2 detect_linux_dist ${ISO_NAME}" >> "/dev/stderr"
     detect_linux_dist "${ISO_NAME}"
@@ -939,56 +998,6 @@ tftp_setup_pxe_iso () {
     TFTP_APPEND_OTHER="nosplash --"
     #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
     TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
-
-    case "$DIST_NAME" in
-    "debian")
-        if [ "${FLG_LIVE}" = "1" ]; then
-            DIST_TYPE="live"
-        else
-            if [ "${DIST_TYPE}" = "net" ]; then
-                DIST_NAME_TYPE="ubuntu"
-            fi
-        fi
-        ;;
-    "centos")
-        if [ "${FLG_LIVE}" = "1" ]; then
-            DIST_TYPE="live"
-        fi
-        ;;
-    "fedora")
-        if [ "${FLG_LIVE}" = "1" ]; then
-            DIST_TYPE="live"
-        else
-            DIST_TYPE="desktop"
-        fi
-        ;;
-    "mint")
-        DIST_NAME_TYPE="ubuntu"
-        DIST_TYPE="desktop"
-        ;;
-
-    "backtrack")
-        case "$DIST_RELEASE" in
-        4)
-            DIST_TYPE="oldlive"
-            ;;
-        5)
-            DIST_TYPE="live"
-            ;;
-        esac
-        ;;
-
-    "kali")
-        echo "[DBG] dist kali" >> "/dev/stderr"
-        ;;
-    "beini")
-        DIST_NAME_TYPE="tinycore"
-        #DIST_ARCH="x86";
-        ;;
-    "veket")
-        DIST_NAME_TYPE="puppy"
-        ;;
-    esac
 
     rm -f "${FN_TMP_TFTPMENU}"
     # setup values
@@ -1446,7 +1455,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "arch/boot ${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
         ;;
