@@ -38,7 +38,12 @@ RedHat)
     export HTTPD_ROOT=/var/www/html
     ;;
 Arch)
-    TFTP_ROOT="/srv/tftp"
+    if [ ! -d "${TFTP_ROOT}" ]; then
+        TFTP_ROOT="/media/tftpboot"
+    fi
+    if [ ! -d "${TFTP_ROOT}" ]; then
+        TFTP_ROOT="/srv/tftp"
+    fi
     if [ ! -d "${HTTPD_ROOT}" ]; then
         export HTTPD_ROOT=/srv/http
     fi
@@ -235,6 +240,12 @@ BEGIN {
                 dist_name = "veket";
                 dist_type = "live";
                 break;
+            case "opensuse":
+                dist_name = "opensuse";
+                dist_type = "live";
+                break;
+            case "leap": # openSUSE name
+                break;
             case "x86_64":
                 dist_arch = "x86_64";
                 break;
@@ -246,6 +257,7 @@ BEGIN {
                 dist_arch = "x86";
                 break;
             case "i386":
+            case "i586":
                 dist_arch = "i386";
                 break;
             case "32bit":
@@ -254,6 +266,7 @@ BEGIN {
                 break;
             case "livecd":
             case "live":
+            case "dvd":  # opensuse
                 flg_live = 1;
                 break;
             case "desktop":
@@ -265,14 +278,10 @@ BEGIN {
                 dist_type="server";
                 flg_nfs=1;
                 break;
+            case "netinstall": # CentOS
             case "netboot":
-                dist_type="net";
-                break;
-            # CentOS: netinstall
-            case "netinstall":
-                dist_type="net";
-                break;
             case "netinst":
+            case "net":  # opensuse
                 dist_type="net";
                 break;
             # CentOS: minimal
@@ -1418,11 +1427,19 @@ EOF
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
             #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-            TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_APPEND_OTHER="arch=i686"
+            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
 
+            #TFTP_APPEND_OTHER="arch=i586"
+            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+            #cat << EOF >> "${FN_TMP_TFTPMENU}"
+#LABEL ${TFTP_TAG_LABEL}_i586
+    #MENU LABEL ${TFTP_MENU_LABEL} (i586)
+    #${TFTP_KERNEL}
+    #${TFTP_APPEND}
+#EOF
+            TFTP_APPEND_OTHER="arch=i686"
+            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
             cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}_i686
     MENU LABEL ${TFTP_MENU_LABEL} (i686)
@@ -1443,6 +1460,43 @@ EOF
             # TFTP_APPEND_NFS="archisobasedir=arch archiso_pxe_http=${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
         ;;
 
+    "opensuse")
+        case "$DIST_TYPE" in
+        "server")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd.img"
+            TFTP_APPEND_NFS=""
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz"
+            ;;
+        "net")
+            # netinstall
+            FLG_NFS=0
+            TFTP_APPEND_HTTP="install=http://download.opensuse.org/factory/repo/oss/"
+
+            ITYPE="${DIST_ARCH}"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/${ITYPE}/loader/initrd splash=silent vga=0x314 showopts"
+            TFTP_APPEND_OTHER="root=/dev/ram0 load_ramdisk=1 ramdisk_size=4096 init=linuxrc"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/${ITYPE}/loader/linux"
+            ;;
+        "desktop"|"live")
+            FLG_NFS=0
+            TFTP_APPEND_HTTP="install=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/"
+
+            ITYPE="${DIST_ARCH}"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/${ITYPE}/loader/initrd splash=silent vga=0x314 showopts"
+            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_APPEND_OTHER="root=/dev/ram0 load_ramdisk=1 ramdisk_size=4096 init=linuxrc"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/${ITYPE}/loader/linux"
+            ;;
+        *)
+            echo "[ERR] Not supported centos type: ${DIST_TYPE}" >> "/dev/stderr"
+            exit 0
+            ;;
+        esac
+        ;;
+
     "archassault"|"blackarchlinux"|"evolution")
             #FLG_MOUNT=0
             #echo "archassault|blackarchlinux|evolution is not support PXE?"
@@ -1450,7 +1504,7 @@ EOF
             ITYPE="${DIST_ARCH}"
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
             TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-            TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
 
@@ -1535,7 +1589,7 @@ EOF
     esac
 
     if [ "${FLG_MOUNT}" = "1" ]; then
-        TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+        TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_HTTP} ${TFTP_APPEND_OTHER}"
         cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}
     MENU LABEL ${TFTP_MENU_LABEL}
@@ -1579,6 +1633,10 @@ EOF
         cat "${FN_TMP_ETCEXPORTS}" >> "/dev/stderr"
         echo "" >> "/dev/stderr"
         echo "[INFO] ==============================================================" >> "/dev/stderr"
+    fi
+    if [ ! "${TFTP_APPEND_HTTP}" = "" ]; then
+        echo "You need also setup HTTP server, so that the directory '${TFTP_ROOT}' can be accessed by: " >> "/dev/stderr"
+        echo "    'http://${DIST_NFSIP}/tftpboot/'" >> "/dev/stderr"
     fi
 
     echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
