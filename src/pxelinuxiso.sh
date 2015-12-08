@@ -1545,11 +1545,17 @@ EOF
             FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
             TFTP_APPEND_NFS=""
-            TFTP_APPEND_OTHER="boot=live config noswap nolocales edd=on nomodeset ocs_live_run=\"ocs-live-general\" ocs_live_extra_param=\"\" keyboard-layouts=\"\" ocs_live_batch=\"no\" locales=\"\" vga=788 nosplash noprompt fetch=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/live/filesystem.squashfs"
+            TFTP_APPEND_OTHER=""
+            if [ "${DIST_ARCH}" = "i386" ]; then
+                # add the 'union=overlay ' for using overlay (instead of aufs)
+                # according to http://sourceforge.net/p/clonezilla/discussion/Clonezilla_live/thread/0f8505b0/
+                TFTP_APPEND_OTHER="union=overlay"
+            fi
+            TFTP_APPEND_OTHER="${TFTP_APPEND_OTHER} boot=live config noswap nolocales edd=on nomodeset ocs_live_run=\"ocs-live-general\" ocs_live_extra_param=\"\" keyboard-layouts=\"\" ocs_live_batch=\"no\" locales=\"\" vga=788 nosplash noprompt fetch=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/live/filesystem.squashfs"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
             ;;
         *)
-            echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
+            echo "[ERR] Not supported ISO type: ${DIST_TYPE}" >> "/dev/stderr"
             exit 0
             ;;
         esac
