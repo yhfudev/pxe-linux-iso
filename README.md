@@ -13,6 +13,9 @@ Supported Linux distribution CD/DVDs
   * Arch Linux
   * Gentoo
   * openSUSE
+  * Mageia
+  * Manjaro
+  * Elementary OS
   * BlackArch
   * Kali/BackTrack
   * Mint Linux

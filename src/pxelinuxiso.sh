@@ -208,6 +208,7 @@ BEGIN {
                 break;
             case "manjaro":
                 dist_name = "manjaro";
+                dist_type="live";
                 break;
             case "ctkarchlive":
                 dist_name = "ctkarchlive";
@@ -223,6 +224,9 @@ BEGIN {
                 dist_name = "kali";
                 dist_type = "live";
                 print "[DBG] change kali value: dist_name=" dist_name "; dist_type=" dist_type
+                break;
+            case "elementaryos":
+                dist_name = "elementaryos";
                 break;
             case "beini":
                 dist_name = "beini";
@@ -242,6 +246,9 @@ BEGIN {
                 dist_type = "live";
                 break;
             case "leap": # openSUSE name
+                break;
+            case "mageia":
+                dist_name = "mageia";
                 break;
             case "x86_64":
                 dist_arch = "x86_64";
@@ -263,7 +270,7 @@ BEGIN {
                 break;
             case "livecd":
             case "live":
-            case "dvd":  # opensuse
+            case "dvd":  # opensuse, mageia
                 flg_live = 1;
                 break;
             case "desktop":
@@ -315,7 +322,10 @@ BEGIN {
             # BT: KDE
             case "kde":
             case "gnome":
+            case "xfce": # manjaro
             case "http:":
+            case "https:":
+            case "ftp:":
                 # ignore
                 print "[DBG] ignore key=" a[i];
                 break;
@@ -1220,6 +1230,40 @@ EOF
         esac
         ;;
 
+    "elementaryos")
+            # desktop, live?
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
+            TFTP_APPEND_NFS="showmounts toram root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=dhcp ro"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
+
+            # automaticly check the name of the 'vmlinuz'
+            #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            #B=$(echo ${A} | awk '{print $1}' )
+            #TFTP_KERNEL="KERNEL ${B}"
+            #B=$(echo ${A} | awk '{print $2}' )
+            #TFTP_APPEND_INITRD="initrd=${B}"
+        ;;
+
+    "mageia")
+            ITYPE="${DIST_ARCH}"
+            case "${DIST_ARCH}" in
+            "i386")
+                ITYPE=i586
+                ;;
+            esac
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/${ITYPE}/all.rdz automatic=method:http,ser:${DIST_NFSIP},dir:${DIST_MOUNTPOINT}/${ITYPE}/,int:eth0,netw:dhcp"
+            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/${ITYPE}/vmlinuz"
+
+            # automaticly check the name of the 'vmlinuz'
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            B=$(echo ${A} | awk '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+        ;;
+
     "backtrack")
         FLG_NFS=1
         echo "[DBG] dist backtrack" >> "/dev/stderr"
@@ -1511,6 +1555,23 @@ EOF
             TFTP_KERNEL="KERNEL ${B}"
         ;;
 
+    "manjaro")
+            FLG_NFS=1
+            ITYPE="${DIST_ARCH}"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/${DIST_NAME}/boot/intel_ucode.img,${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}.img"
+            TFTP_APPEND_NFS="misobasedir=${DIST_NAME} miso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/ ip=dhcp"
+            #misolabel=MJRO0812 nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 logo.nologo overlay=free quiet splash showopts ip=dhcp
+
+            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}"
+
+            # automaticly check the name of the 'vmlinuz'
+            #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DIST_NAME}/boot ${DEFAULT_BOOTIMG_DIRS}")
+            #B=$(echo ${A} | awk '{print $1}' )
+            #TFTP_KERNEL="KERNEL ${B}"
+        ;;
+
     "blackarchlinux")
             #FLG_MOUNT=0
             #echo "archassault|blackarchlinux|evolution is not support PXE?"
@@ -1676,6 +1737,7 @@ EOF
     EXEC_NFSEXT=$(which exportfs)
     if [ ! -e "${EXEC_NFSEXT}" ]; then
         $MYEXEC install_package nfs-common nfs-kernel-server portmap
+        EXEC_NFSEXT=$(which exportfs)
     fi
 
     DN_PXEBACKUP="/etc/pxelinuxisobak/"
@@ -1733,12 +1795,16 @@ EOF
             $MYEXEC cp /tmp/aaa /etc/exports
         fi
         $MYEXEC attach_to_file "${FN_TMP_ETCEXPORTS}" /etc/exports
-        #$MYEXEC sudo service nfs-kernel-server restart # Debian/Ubuntu
-        #$MYEXEC service nfs restart   # RedHat/CentOS
-        #$MYEXEC systemctl restart rpc-idmapd.service
-        #$MYEXEC systemctl restart rpc-mountd.service
-        #$MYEXEC exportfs -arv
-        $MYEXEC systemctl restart rpcbind nfs-server
+        #if [ -e `which systemctl` ]; then $MYEXEC sudo service nfs-kernel-server restart; fi # Debian/Ubuntu
+        #if [ -e `which systemctl` ]; then $MYEXEC service nfs restart; fi   # RedHat/CentOS
+        #if [ -e `which systemctl` ]; then $MYEXEC systemctl restart rpc-idmapd.service; fi
+        #if [ -e `which systemctl` ]; then $MYEXEC systemctl restart rpc-mountd.service; fi
+        if [ -e "${EXEC_NFSEXT}" ]; then
+            $MYEXEC ${EXEC_NFSEXT} -arv
+        fi
+        if [ -e `which systemctl` ]; then
+            $MYEXEC systemctl restart rpcbind nfs-server
+        fi
     fi
 
     # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
@@ -1750,9 +1816,9 @@ EOF
         $MYEXEC mv /tmp/aaa ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
     fi
     $MYEXEC echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
-    $MYEXEC /etc/init.d/tftpd-hpa restart # debian/ubuntu
-    $MYEXEC service xinetd restart        # redhat/centos
-    $MYEXEC systemctl restart tftpd.socket tftpd.service # arch
+    if [ -e /etc/init.d/tftpd-hpa ]; then $MYEXEC /etc/init.d/tftpd-hpa restart; fi # debian/ubuntu
+    if [ -e `which service`       ]; then $MYEXEC service xinetd restart; fi        # redhat/centos
+    if [ -e `which systemctl`     ]; then $MYEXEC systemctl restart tftpd.socket tftpd.service; fi # arch
 }
 
 process_file_list () {
