@@ -47,6 +47,9 @@ Prerequisites
      /var/lib/tftpboot/netboot/pxelinux.cfg/default;
   * To mount ISO files as loop device, a line will also be appended to /etc/fstab;
   * Installed syslinux;
+  * To support HTTP installation, you may need to get the HTTP server installed and
+    link the directory tftpboot as sub-dir of the URL. For example, the tftpboot can
+    be accessed by http://localhost/tfptboot/
 
 Installation
 ------------

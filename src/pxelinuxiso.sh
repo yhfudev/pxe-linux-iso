@@ -185,6 +185,9 @@ BEGIN {
                 dist_name = "edubuntu";
                 dist_type="desktop";
                 break;
+            case "lxle":
+                dist_name = "lxle";
+                break;
             case "doudoulinux":
                 dist_name = "doudoulinux";
                 break;
@@ -711,6 +714,7 @@ tftp_init_service () {
     $MYEXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${TFTP_ROOT}/netboot/"
     $MYEXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${TFTP_ROOT}/netboot/"
     $MYEXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${TFTP_ROOT}/netboot/"
+    $MYEXEC cp "${SYSLINUX_ROOT}/pxechain.com" "${TFTP_ROOT}/netboot/"
 
     # 然后构建文件链接：(注意链接要使用相对链接文件所在目录的路径!)
     $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
@@ -932,7 +936,8 @@ tftp_setup_pxe_iso () {
             DIST_TYPE="live"
         fi
         ;;
-    "mint")
+
+    "mint"|"lxle")
         DIST_NAME_TYPE="ubuntu"
         DIST_TYPE="desktop"
         if [ "${FLG_LIVE}" = "1" ]; then
