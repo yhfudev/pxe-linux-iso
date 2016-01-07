@@ -190,9 +190,6 @@ BEGIN {
                 break;
             case "centos":
                 dist_name = "centos";
-            case "fuel":
-                dist_arch = "x86_64";
-                dist_name = "fuel";
                 break;
             case "fedora":
                 dist_name = "fedora";
@@ -282,6 +279,7 @@ BEGIN {
             case "netboot":
             case "netinst":
             case "net":  # opensuse
+            case "light": # kali
                 dist_type="net";
                 break;
             # CentOS: minimal
@@ -1329,6 +1327,7 @@ EOF
                     echo "Not support Kali non-PAE kernel at present," >> "${FN_TMP_LASTMSG}"
                     echo "You may ask the author to add it in, or" >> "${FN_TMP_LASTMSG}"
                     echo "you want to read this to compile kernel by yourself:" >> "${FN_TMP_LASTMSG}"
+                    echo "http://docs.kali.org/development/live-build-a-custom-kali-iso" >> "${FN_TMP_LASTMSG}"
                     echo "http://docs.kali.org/pdf/kali-book-en.pdf" >> "${FN_TMP_LASTMSG}"
                     echo "http://samiux.blogspot.com/2013/03/howto-rebuild-kali-linux-101.html" >> "${FN_TMP_LASTMSG}"
 
@@ -1497,9 +1496,7 @@ EOF
         esac
         ;;
 
-    "archassault"|"blackarchlinux"|"evolution")
-            #FLG_MOUNT=0
-            #echo "archassault|blackarchlinux|evolution is not support PXE?"
+    "archassault"|"evolution")
             FLG_NFS=1
             ITYPE="${DIST_ARCH}"
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
@@ -1512,6 +1509,25 @@ EOF
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "arch/boot ${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
+        ;;
+
+    "blackarchlinux")
+            #FLG_MOUNT=0
+            #echo "archassault|blackarchlinux|evolution is not support PXE?"
+            FLG_NFS=1
+            ITYPE="${DIST_ARCH}"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/blackarch/boot/${ITYPE}/archiso.img"
+            TFTP_APPEND_NFS="archisobasedir=blackarch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/blackarch/boot/${ITYPE}/vmlinuz"
+
+            # automaticly check the name of the 'vmlinuz'
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "blackarch/boot ${DEFAULT_BOOTIMG_DIRS}")
+            B=$(echo ${A} | awk '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+            # the default password:
+            TFTP_MENU_LABEL=${TFTP_MENU_LABEL} root:blackarch
         ;;
 
     "tinycore")

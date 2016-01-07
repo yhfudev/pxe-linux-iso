@@ -12,6 +12,8 @@ Supported Linux distribution CD/DVDs
   * Debian/Ubuntu
   * Arch Linux
   * Gentoo
+  * openSUSE
+  * BlackArch
   * Kali/BackTrack
   * Mint Linux
   * clonezilla
