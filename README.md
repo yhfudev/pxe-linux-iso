@@ -20,6 +20,7 @@ Supported Linux distribution CD/DVDs
   * Kali/BackTrack
   * Mint Linux
   * clonezilla
+  * LXLE
   * tinycore
   * puppy
   * doudoulinux

@@ -1491,7 +1491,7 @@ EOF
             cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}_i686
     MENU LABEL ${TFTP_MENU_LABEL} (i686)
-    ${TFTP_KERNEL}
+    ${TFTP_KERNEL} nouveau.modeset=0 i915.preliminary_hw_support=1
     ${TFTP_APPEND}
 EOF
 
@@ -1681,7 +1681,7 @@ EOF
         cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}
     MENU LABEL ${TFTP_MENU_LABEL}
-    ${TFTP_KERNEL}
+    ${TFTP_KERNEL} nouveau.modeset=0 i915.preliminary_hw_support=1
     ${TFTP_APPEND}
 EOF
     else
