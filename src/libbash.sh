@@ -463,11 +463,41 @@ patch_centos_gawk () {
     $DO_EXEC rm -rf ~/rpmbuild/BUILD/gawk-4.0.1/
 }
 
-# 对于非 x86 平台，如arm等，使用下载支持 x86 启动的syslinux
+# download syslinux for i686/x86_64
+# for non-intel CPU to PXE boot PC
 download_extract_2tmp_syslinux () {
     mr_trace "[DBG] download and extract syslinux for i686/x86_64 platform ..."
 
-    PKG=""
+    $DO_EXEC cd /tmp
+    URL_REAL="https://www.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.tar.gz"
+    FN_SYSLI=$(basename ${URL_REAL})
+
+    $DO_EXEC wget --no-check-certificate "${URL_REAL}"
+
+    if [ -f "${FN_SYSLI}" ]; then
+        $DO_EXEC extract_file "${FN_SYSLI}"
+        DN_SRC=/tmp/syslinux-6.03/
+        DN_INSTALL=${DN_SRC}/myinstall/
+        $DO_EXEC mkdir -p "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/core/pxelinux.0"                    "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/memdisk/memdisk"                    "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/elflink/ldlinux/ldlinux.c32"  "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/menu/vesamenu.c32"            "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/lib/libcom32.c32"             "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/libutil/libutil.c32"          "${DN_INSTALL}"
+
+        $DO_EXEC cp "${DN_SRC}/bios/com32/menu/menu.c32"                "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/mboot/mboot.c32"              "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/chain/chain.c32"              "${DN_INSTALL}"
+    else
+        mr_trace "[ERR] not found file ${FN_SYSLI}"
+    fi
+    $DO_EXEC cd -
+}
+
+# download Arch Linux package syslinux
+download_extract_2tmp_syslinux_from_arch () {
+    mr_trace "[DBG] download and extract syslinux for i686/x86_64 platform ..."
 
     $DO_EXEC cd /tmp
 

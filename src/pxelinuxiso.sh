@@ -1142,11 +1142,18 @@ tftp_setup_pxe_iso () {
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
+            mr_trace "Ubuntu Desktop: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}"
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            mr_trace "Ubuntu Desktop: detect_vmlinu_initrd() return: $A"
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
+            #DEBUG: if [ ! "${TFTP_KERNEL}" = "KERNEL images-desktop/ubuntu/17.04/amd64/casper/vmlinuz.efi" ]; then mr_trace "[TEST] un-expected KERNEL!"; exit 2; fi
             B=$(echo ${A} | awk '{print $2}' )
             TFTP_APPEND_INITRD="initrd=${B}"
+            #DEBUG: if [ ! "${TFTP_APPEND_INITRD}" = "initrd=images-desktop/ubuntu/17.04/amd64/casper/initrd.lz" ]; then mr_trace "[TEST] un-expected initrd!"; exit 2; fi
+
+            mr_trace "Ubuntu Desktop: TFTP_KERNEL: $TFTP_KERNEL"
+            mr_trace "Ubuntu Desktop: TFTP_APPEND_INITRD: $TFTP_APPEND_INITRD"
 
             if [ "${FLG_NON_PAE}" = "1" ]; then
               URL_VMLINUZ=
@@ -1721,7 +1728,7 @@ EOF
         mr_trace "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         mr_trace "[INFO] You may want to mount the ISO by manual to test the file:"
         mr_trace "[INFO]   mkdir -p '${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}'"
-        mr_trace "[INFO]   mount -o loop,utf8 '${DIST_FILE}' '${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}'"
+        mr_trace "[INFO]   mount -o loop,utf8 '${SYSTEM_TOP}/${DIST_FILE}' '${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}'"
         if [ "$OSTYPE" = "OpenWrt" ]; then # openwrt
             mr_trace "[INFO] The following content will be attached to the etc/config/fstab file '${SYSTEM_TOP}/etc/config/fstab':"
             mr_trace ""
@@ -2045,7 +2052,8 @@ while [ ! "$1" = "" ]; do
         FLG_NON_PAE=1
         ;;
     -*)
-        echo "Use option --help to get the usages." ${OUT_TO_STDERR}
+        mr_trace "Unknown option: $1"
+        mr_trace "Use option --help to get the usages."
         exit 1
         ;;
     *)
@@ -2081,13 +2089,20 @@ fi
 if [ ! -d "${SYSTEM_TOP}/${HTTPD_ROOT}" ]; then
     export HTTPD_ROOT=/www
 fi
-# Ubuntu: /usr/lib/syslinux/
-# CentOS: /usr/share/syslinux/
+
+install_package syslinux
 if [ ! -d "${SYSLINUX_ROOT}" ]; then
     export SYSLINUX_ROOT=/usr/share/syslinux/
 fi
 if [ ! -d "${SYSLINUX_ROOT}" ]; then
     export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32/
+fi
+if [ ! -d "${SYSLINUX_ROOT}" ]; then
+    export SYSLINUX_ROOT=/tmp/syslinux-6.03/myinstall/
+fi
+if [ ! -d "${SYSLINUX_ROOT}" ]; then
+    mr_trace "[ERR] Not found syslinux"
+    exit 1
 fi
 
 
