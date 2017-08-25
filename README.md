@@ -56,7 +56,7 @@ Installation
 ------------
   Download the source files from GIT repo
 
-    git clone https://code.google.com/p/pxe-linux-iso/
+    git clone https://github.com/yhfudev/pxe-linux-iso.git
 
 Initialize directories
 ----------------------

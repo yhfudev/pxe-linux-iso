@@ -21,11 +21,19 @@ else
     DN_EXEC="./"
 fi
 
+DO_EXEC=echo
+
 . ${DN_EXEC}/libbash.sh
 
-FN_TMP_LASTMSG="/tmp/pxelinuxiso-lastmsg"
+FN_TMP_PREFIX="/tmp/pxelinuxiso-"
+
+FN_TMP_LASTMSG="${FN_TMP_PREFIX}lastmsg"
 # the iso file list saved from arguments
-FN_TMP_LIST="/tmp/pxelinuxiso-iso-file-list"
+FN_TMP_LIST="${FN_TMP_PREFIX}iso-file-list"
+
+# the system top directory, should be '/' if you use current OS
+# or somewhere else if you mount the target system in a sub directory
+export SYSTEM_TOP=/
 
 export TFTP_ROOT=/var/lib/tftpboot
 export DIST_NFSIP=192.168.0.1
@@ -38,25 +46,17 @@ RedHat)
     export HTTPD_ROOT=/var/www/html
     ;;
 Arch)
-    if [ ! -d "${TFTP_ROOT}" ]; then
-        TFTP_ROOT="/media/tftpboot"
-    fi
-    if [ ! -d "${TFTP_ROOT}" ]; then
-        TFTP_ROOT="/srv/tftp"
-    fi
-    if [ ! -d "${HTTPD_ROOT}" ]; then
-        export HTTPD_ROOT=/srv/http
-    fi
-    if [ ! -d "${SYSLINUX_ROOT}" ]; then
-        export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32
-    fi
+    export HTTPD_ROOT=/srv/http
+    ;;
+OpenWrt)
+    export HTTPD_ROOT=/www
     ;;
 esac
 
 ############################################################
 # detect the linux distribution
-FN_AWK_DET_ISO="/tmp/pxelinuxiso-detlinuxiso.awk"
-FN_AWK_DET_URL="/tmp/pxelinuxiso-detlinuxurl.awk"
+FN_AWK_DET_ISO="${FN_TMP_PREFIX}detlinuxiso.awk"
+FN_AWK_DET_URL="${FN_TMP_PREFIX}detlinuxurl.awk"
 
 gen_detect_urliso_script () {
     PARAM_FN_AWK=$1
@@ -470,9 +470,9 @@ detect_linux_dist () {
     FN_SINGLE=$(basename "${PARAM_URL2}")
     #URL2BASE=$(dirname "${PARAM_URL2}")
 
-    echo "[DBG] FN_SINGLE=${FN_SINGLE}"
+    mr_trace "[DBG] FN_SINGLE=${FN_SINGLE}"
 
-    FN_TMP=/tmp/pxelinuxiso-out-iso
+    FN_TMP=${FN_TMP_PREFIX}out-iso
     gen_detect_urliso_script "${FN_AWK_DET_ISO}"
     echo "${FN_SINGLE}" | awk -v TYP=iso -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_ISO}"
     _detect_export_values "${FN_TMP}"
@@ -484,8 +484,8 @@ detect_linux_dist () {
 }
 ############################################################
 
-FN_MD5TMP="/tmp/pxelinuxiso-md5sumall"
-FN_SHA1TMP="/tmp/pxelinuxiso-sha1sumall"
+FN_MD5TMP="${FN_TMP_PREFIX}md5sumall"
+FN_SHA1TMP="${FN_TMP_PREFIX}sha1sumall"
 
 check_xxxsum () {
     # sumname is MD5SUM or SHA1SUM
@@ -501,14 +501,14 @@ check_xxxsum () {
     PARAM_RENAME1=$1
     shift
 
-    echo "[DBG] PARAM_SUMNAME=$PARAM_SUMNAME" >> "/dev/stderr"
-    echo "[DBG] PARAM_PROGNAME=$PARAM_PROGNAME" >> "/dev/stderr"
-    echo "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM" >> "/dev/stderr"
-    echo "[DBG] PARAM_RENAME1=$PARAM_RENAME1" >> "/dev/stderr"
+    mr_trace "[DBG] PARAM_SUMNAME=$PARAM_SUMNAME"
+    mr_trace "[DBG] PARAM_PROGNAME=$PARAM_PROGNAME"
+    mr_trace "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM"
+    mr_trace "[DBG] PARAM_RENAME1=$PARAM_RENAME1"
 
     FLG_DW=1
     if [ -f "${PARAM_RENAME1}" ]; then
-        echo "[DBG] 1 set flg_dw back to 0" >> "/dev/stderr"
+        mr_trace "[DBG] 1 set flg_dw back to 0"
         FLG_DW=0
     fi
     MD5SUM_DW=${PARAM_STATIC_SUM}
@@ -518,11 +518,11 @@ check_xxxsum () {
         MD5SUM_LOCAL=$(grep -i "${FN_SINGLE}" "${FN}" | awk '{print $1}')
         if [ ! "${MD5SUM_LOCAL}" = "" ]; then
             if [ ! "${MD5SUM_LOCAL}" = "${MD5SUM_DW}" ]; then
-                echo "[DBG] MD5SUM_LOCAL($MD5SUM_LOCAL) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)" >> "/dev/stderr"
+                mr_trace "[DBG] MD5SUM_LOCAL($MD5SUM_LOCAL) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)"
                 MD5SUM_DW=${PARAM_STATIC_SUM}
                 FLG_DW=1
             fi
-            echo "[DBG] 2 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+            mr_trace "[DBG] 2 set flg_dw=${FLG_DW}"
         fi
     else
         # no local MD5SUM, down load file
@@ -530,41 +530,41 @@ check_xxxsum () {
         touch "${FN}"
     fi
     MD5SUM_REMOTE=
-    rm -f "/tmp/pxelinuxiso-md5tmp"
-    wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "/tmp/pxelinuxiso-md5tmp"
+    rm -f "${FN_TMP_PREFIX}md5tmp"
+    wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "${FN_TMP_PREFIX}md5tmp"
     if [ ! "$?" = "0" ]; then
-        rm -f "/tmp/pxelinuxiso-md5tmp"
+        rm -f "${FN_TMP_PREFIX}md5tmp"
         FN_BASE1=$(echo "${PARAM_SUMNAME}" | tr '[A-Z]' '[a-z]')
-        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "/tmp/pxelinuxiso-md5tmp"
+        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "${FN_TMP_PREFIX}md5tmp"
         if [ ! "$?" = "0" ]; then
-            rm -f "/tmp/pxelinuxiso-md5tmp"
+            rm -f "${FN_TMP_PREFIX}md5tmp"
         fi
     fi
-    if [ ! -f "/tmp/pxelinuxiso-md5tmp" ]; then
+    if [ ! -f "${FN_TMP_PREFIX}md5tmp" ]; then
         FN_BASE1=$(basename "${FN_SINGLE}" | ${EXEC_AWK} -F. '{b=$1; for (i=2; i < NF; i ++) {b=b "." $(i)}; print b}')
-        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "/tmp/pxelinuxiso-md5tmp"
+        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "${FN_TMP_PREFIX}md5tmp"
         if [ ! "$?" = "0" ]; then
-            rm -f "/tmp/pxelinuxiso-md5tmp"
+            rm -f "${FN_TMP_PREFIX}md5tmp"
         fi
     fi
-    if [ ! -f "/tmp/pxelinuxiso-md5tmp" ]; then
-        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME}.md5.txt -O "/tmp/pxelinuxiso-md5tmp"
+    if [ ! -f "${FN_TMP_PREFIX}md5tmp" ]; then
+        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME}.md5.txt -O "${FN_TMP_PREFIX}md5tmp"
         if [ ! "$?" = "0" ]; then
-            rm -f "/tmp/pxelinuxiso-md5tmp"
+            rm -f "${FN_TMP_PREFIX}md5tmp"
         fi
     fi
-    if [ -f "/tmp/pxelinuxiso-md5tmp" ]; then
-        echo "[DBG] chk file /tmp/pxelinuxiso-md5tmp" >> "/dev/stderr"
-        echo "[DBG] grep -i ${FN_SINGLE} /tmp/pxelinuxiso-md5tmp | awk '{print $1}'" >> "/dev/stderr"
-        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "/tmp/pxelinuxiso-md5tmp" | awk '{print $1}')
-        echo "[DBG] MD5SUM_REMOTE=$MD5SUM_REMOTE" >> "/dev/stderr"
-        echo "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM" >> "/dev/stderr"
+    if [ -f "${FN_TMP_PREFIX}md5tmp" ]; then
+        mr_trace "[DBG] chk file ${FN_TMP_PREFIX}md5tmp"
+        mr_trace "[DBG] grep -i ${FN_SINGLE} ${FN_TMP_PREFIX}md5tmp | awk '{print $1}'"
+        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "${FN_TMP_PREFIX}md5tmp" | awk '{print $1}')
+        mr_trace "[DBG] MD5SUM_REMOTE=$MD5SUM_REMOTE"
+        mr_trace "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM"
         if [ ! "${MD5SUM_REMOTE}" = "" ]; then
             if [ ! "${MD5SUM_REMOTE}" = "${MD5SUM_DW}" ]; then
-                echo "[DBG] MD5SUM_REMOTE($MD5SUM_REMOTE) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)" >> "/dev/stderr"
+                mr_trace "[DBG] MD5SUM_REMOTE($MD5SUM_REMOTE) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)"
                 MD5SUM_DW=${MD5SUM_REMOTE}
                 FLG_DW=1
-                echo "[DBG] 3 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+                mr_trace "[DBG] 3 set flg_dw=${FLG_DW}"
             fi
         fi
     fi
@@ -577,31 +577,31 @@ check_xxxsum () {
     fi
     if [ "${FLG_TMP1}" = "1" ]; then
         if [ "${FLG_DW}" = "1" ]; then
-            echo "[DBG] chk sum: ${PARAM_PROGNAME} ${MD5SUM_DW}  ${PARAM_RENAME1}" >> "/dev/stderr"
+            mr_trace "[DBG] chk sum: ${PARAM_PROGNAME} ${MD5SUM_DW}  ${PARAM_RENAME1}"
             echo "${MD5SUM_DW}  ${PARAM_RENAME1}" > md5sumtmp2
-            #echo "[DBG] md5sum check:"  >> "/dev/stderr"; cat md5sumtmp2 ; echo ""; echo "[DBG] md5sum --------------" >> "/dev/stderr"
+            #mr_trace "[DBG] md5sum check:"; cat md5sumtmp2 | while read a; do mr_trace $a; done; mr_trace ""; mr_trace "[DBG] md5sum --------------"
             ${PARAM_PROGNAME} -c md5sumtmp2
             RET=$?
             rm -f md5sumtmp2
-            #echo "[DBG] md5sum check ret = $RET" >> "/dev/stderr"
+            #mr_trace "[DBG] md5sum check ret = $RET"
             if [ ${RET} = 0 ]; then
                 FLG_DW=0
                 # update local MD5SUMS
-                echo "[DBG] FN=${FN}" >> "/dev/stderr"
+                #mr_trace "[DBG] FN=${FN}"
                 grep -v "$( basename "${PARAM_RENAME1}" )" "${FN}" > "${FN}-new"
                 mv "${FN}-new" "${FN}"
                 echo "${MD5SUM_DW}  ${PARAM_RENAME1}" >> "${FN}"
             else
                 FLG_DW=1
             fi
-            echo "[DBG] 4 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+            mr_trace "[DBG] 4 set flg_dw=${FLG_DW}"
         fi
     else
         FLG_DW=1
-        echo "[DBG] filename=${PARAM_RENAME1}" >> "/dev/stderr"
-        echo "[DBG] 5 set flg_dw=${FLG_DW}" >> "/dev/stderr"
+        mr_trace "[DBG] filename=${PARAM_RENAME1}"
+        mr_trace "[DBG] 5 set flg_dw=${FLG_DW}"
     fi
-    echo "[DBG] check sum done: flg_down=${FLG_DW}" >> "/dev/stderr"
+    mr_trace "[DBG] check sum done: flg_down=${FLG_DW}"
     echo "${FLG_DW}"
 }
 
@@ -614,7 +614,7 @@ down_url () {
         shift
     fi
 
-    echo "[DBG] PARAM_RENAME-0=$PARAM_RENAME" >> "/dev/stderr"
+    mr_trace "[DBG] PARAM_RENAME-0=$PARAM_RENAME"
 
     if [ "${PARAM_RENAME}" = "" ]; then
         FNDOWN0=$(echo "${PARAM_URL0}" | awk -F? '{print $1}')
@@ -622,12 +622,12 @@ down_url () {
         DN_SRCS=downloads
         PARAM_RENAME=${DN_SRCS}/$(basename "${FNDOWN0}")
 
-        echo "[DBG] PARAM_RENAME-1=$PARAM_RENAME" >> "/dev/stderr"
+        mr_trace "[DBG] PARAM_RENAME-1=$PARAM_RENAME"
     fi
     FN_SINGLE=$(basename "${PARAM_RENAME}")
     DN_SRCS=$(dirname "${PARAM_RENAME}")
-    echo "[DBG] FN_SINGLE=$FN_SINGLE" >> "/dev/stderr"
-    echo "[DBG] DN_SRCS=$DN_SRCS" >> "/dev/stderr"
+    mr_trace "[DBG] FN_SINGLE=$FN_SINGLE"
+    mr_trace "[DBG] DN_SRCS=$DN_SRCS"
 
     MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
     FLG_DOWN=$(  check_xxxsum MD5SUMS md5sum "${MD5SUM_STATIC}" "${PARAM_RENAME}" )
@@ -645,105 +645,108 @@ down_url () {
     fi
 
     if [ "${FLG_DOWN}" = "1" ]; then
-        echo "[DBG] start download file: ${PARAM_URL0}" >> "/dev/stderr"
+        mr_trace "[DBG] start download file: ${PARAM_URL0}"
         if [ "${FLG_NOINTERACTIVE}" = "0" ]; then
             read -rsn 1 -p "Press any key to continue..."
         fi
-        #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
+        #mr_trace "[DBG] exit 0"; exit 0
 
-        echo "[DBG] " download_file "${DN_SRCS}" "${MD5SUM_DW}" "${FN_SINGLE}" "${PARAM_URL0}" >> "/dev/stderr"
+        mr_trace "[DBG] " download_file "${DN_SRCS}" "${MD5SUM_DW}" "${FN_SINGLE}" "${PARAM_URL0}"
         RET=0
-        $MYEXEC rm -f "${DN_SRCS}/${FN_SINGLE}"
-        $MYEXEC wget --no-check-certificate -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
+        $DO_EXEC rm -f "${DN_SRCS}/${FN_SINGLE}"
+        $DO_EXEC wget --no-check-certificate -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
         RET=$?
         if [ ${RET} = 0 ]; then
-            echo "[INFO] md5sum ... ${FN_SINGLE}" >> "/dev/stderr"
-            md5sum  "${DN_SRCS}/${FN_SINGLE}" > /tmp/pxelinuxiso-md5sum-down
-            $MYEXEC attach_to_file /tmp/pxelinuxiso-md5sum-down "${DN_SRCS}/MD5SUMS"
-            echo "[INFO] sha1sum ... ${FN_SINGLE}" >> "/dev/stderr"
-            sha1sum "${DN_SRCS}/${FN_SINGLE}" > /tmp/pxelinuxiso-sha1sum-down
-            $MYEXEC attach_to_file /tmp/pxelinuxiso-sha1sum-down "${DN_SRCS}/SHA1SUMS"
+            mr_trace "[INFO] md5sum ... ${FN_SINGLE}"
+            md5sum  "${DN_SRCS}/${FN_SINGLE}" > ${FN_TMP_PREFIX}md5sum-down
+            $DO_EXEC attach_to_file ${FN_TMP_PREFIX}md5sum-down "${DN_SRCS}/MD5SUMS"
+            mr_trace "[INFO] sha1sum ... ${FN_SINGLE}"
+            sha1sum "${DN_SRCS}/${FN_SINGLE}" > ${FN_TMP_PREFIX}sha1sum-down
+            $DO_EXEC attach_to_file ${FN_TMP_PREFIX}sha1sum-down "${DN_SRCS}/SHA1SUMS"
         else
-            echo "[ERR] download file ${PARAM_URL0} error!" >> "/dev/stderr"
-            #echo "[DBG] exit 0" >> "/dev/stderr"
+            mr_trace "[ERR] download file ${PARAM_URL0} error!"
+            #mr_trace "[DBG] exit 0"
             #exit 0
         fi
     fi
 }
 
 tftp_init_directories () {
-    # Ubuntu: /usr/lib/syslinux/
-    # CentOS: /usr/share/syslinux/
+
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg"
+
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-server/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-desktop/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-net/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-live/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/"
+
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${HTTPD_ROOT}"
+
+    # setup downloads folder, all of the ISO files will be stored here
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
+
     if [ ! -d "${SYSLINUX_ROOT}" ]; then
-        echo "[DBG] Error in searching syslinux folder: ${SYSLINUX_ROOT}"
+        mr_trace "[DBG] Error in searching syslinux folder: ${SYSLINUX_ROOT}"
         return
     fi
 
-    $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg"
-
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-desktop/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-net/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-live/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
-
-    $MYEXEC mkdir -p "${HTTPD_ROOT}"
-
-    # setup downloads folder, all of the ISO files will be stored here
-    $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
 }
 
 tftp_init_service () {
-    echo "[DBG] Install TFTP/NFS/DHCP servers ..."
-    install_package tftpd-hpa syslinux nfs-kernel-server dhcp3-server #bind9
+    mr_trace "[DBG] Install TFTP/NFS/DHCP servers ..."
+    if [ "${SYSTEM_TOP}" = "/" ]; then
+        install_package tftpd-hpa nfs-kernel-server dhcp3-server #bind9
+    fi
+    install_package syslinux
 
     tftp_init_directories
-    $MYEXEC mkdir -p "${TFTP_ROOT}/netboot/pxelinux.cfg/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/"
 
-    $MYEXEC alias cp=cp
+    $DO_EXEC alias cp=cp
     if [ -f "${SYSLINUX_ROOT}/pxelinux.0" ]; then
-        $MYEXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${TFTP_ROOT}/netboot/"
-        $MYEXEC cp "${SYSLINUX_ROOT}/memdisk"    "${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
     else
-        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${TFTP_ROOT}/netboot/"
-        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${TFTP_ROOT}/netboot/"
-        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/ldlinux.c32" "${TFTP_ROOT}/netboot/"
-        $MYEXEC cp "${SYSLINUX_ROOT}/../bios/libutil.c32" "${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/ldlinux.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/libutil.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
     fi
-    $MYEXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${TFTP_ROOT}/netboot/"
-    $MYEXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${TFTP_ROOT}/netboot/"
-    $MYEXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${TFTP_ROOT}/netboot/"
-    $MYEXEC cp "${SYSLINUX_ROOT}/pxechain.com" "${TFTP_ROOT}/netboot/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/pxechain.com" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
 
     # 然后构建文件链接：(注意链接要使用相对链接文件所在目录的路径!)
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-server/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-desktop/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-net/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/images-live/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
-    $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
-    $MYEXEC cd "${TFTP_ROOT}/netboot"
-    $MYEXEC ln -s ../images-server/
-    $MYEXEC ln -s ../images-desktop/
-    $MYEXEC ln -s ../images-net/
-    $MYEXEC ln -s ../images-live/
-    $MYEXEC ln -s ../downloads/
-    $MYEXEC ln -s ../kickstarts/
-    $MYEXEC cd -
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-server/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-desktop/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-net/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-live/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/"
+    $DO_EXEC cd "${SYSTEM_TOP}/${TFTP_ROOT}/netboot"
+    $DO_EXEC ln -sf ../images-server/ "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/images-server"
+    $DO_EXEC ln -sf ../images-desktop/
+    $DO_EXEC ln -sf ../images-net/
+    $DO_EXEC ln -sf ../images-live/
+    $DO_EXEC ln -sf ../downloads/
+    $DO_EXEC ln -sf ../kickstarts/
+    $DO_EXEC cd -
 
-    $MYEXEC mkdir -p "${HTTPD_ROOT}"
-    $MYEXEC cd "${HTTPD_ROOT}"
-    $MYEXEC ln -s "${TFTP_ROOT}/images-server/"
-    $MYEXEC ln -s "${TFTP_ROOT}/images-desktop/"
-    $MYEXEC ln -s "${TFTP_ROOT}/images-net/"
-    $MYEXEC ln -s "${TFTP_ROOT}/images-live/"
-    $MYEXEC ln -s "${TFTP_ROOT}/downloads/"
-    $MYEXEC ln -s "${TFTP_ROOT}/kickstarts/"
-    $MYEXEC cd -
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${HTTPD_ROOT}"
+    $DO_EXEC cd "${SYSTEM_TOP}/${HTTPD_ROOT}"
+    $DO_EXEC ln -sf "${TFTP_ROOT}/images-server/" "${SYSTEM_TOP}/${HTTPD_ROOT}/images-server"
+    $DO_EXEC ln -sf "${TFTP_ROOT}/images-desktop/"
+    $DO_EXEC ln -sf "${TFTP_ROOT}/images-net/"
+    $DO_EXEC ln -sf "${TFTP_ROOT}/images-live/"
+    $DO_EXEC ln -sf "${TFTP_ROOT}/downloads/"
+    $DO_EXEC ln -sf "${TFTP_ROOT}/kickstarts/"
+    $DO_EXEC cd -
 
     # set the header of configuration file
-    cat > /tmp/pxelinuxiso-tftpdefault << EOF
+    cat > ${FN_TMP_PREFIX}tftpdefault << EOF
 #PROMPT 1
 #TIMEOUT 0
 #DISPLAY pxelinux.cfg/boot.txt
@@ -762,15 +765,16 @@ LABEL local
         LOCALBOOT 0
 
 EOF
-    $MYEXEC cp /tmp/pxelinuxiso-tftpdefault ${TFTP_ROOT}/netboot/pxelinux.cfg/default
+    $DO_EXEC mv ${FN_TMP_PREFIX}tftpdefault "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default"
 
-    cat > /tmp/pxelinuxiso-tftpboot << EOF
+    cat > ${FN_TMP_PREFIX}tftpboot << EOF
 Available Boot Options:
 =======================
 EOF
-    $MYEXEC cp /tmp/pxelinuxiso-tftpboot ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
-}
+    $DO_EXEC mv ${FN_TMP_PREFIX}tftpboot "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt"
 
+    rm -f ${FN_TMP_PREFIX}tftpdefault ${FN_TMP_PREFIX}tftpboot
+}
 
 
 # detect the pxe booting files
@@ -823,25 +827,27 @@ detect_vmlinu_initrd () {
     shift
 
     # automaticly check the name of the 'vmlinuz'
-    $MYEXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
-    $MYEXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
-    $MYEXEC cd "${PARAM_TFTP_ROOT}"
+    $DO_EXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
+    $DO_EXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
+    $DO_EXEC cd "${PARAM_TFTP_ROOT}"
     A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" "${PARAM_SEARCH_DIRS}" )
     TFTP_KERNEL="${A}"
-    #echo "[INFO] KERNEL:${TFTP_KERNEL}" >> /dev/stderr
+    #mr_trace "[INFO] KERNEL:${TFTP_KERNEL}"
     A=$(detect_file "${PARAM_MNTPNT}" "initrd" "${PARAM_SEARCH_DIRS}" )
     TFTP_APPEND_INITRD="${A}"
-    #echo "[INFO] initrd:${TFTP_APPEND_INITRD}" >> /dev/stderr
-    $MYEXEC umount "${PARAM_DIST_FILE}"
+    #mr_trace "[INFO] initrd:${TFTP_APPEND_INITRD}"
+    $DO_EXEC umount "${PARAM_DIST_FILE}"
     echo "${TFTP_KERNEL} ${TFTP_APPEND_INITRD}"
-    $MYEXEC cd -
+    $DO_EXEC cd -
 }
 
-FN_TMP_ETCEXPORTS="/tmp/pxelinuxiso-etcexports"
-FN_TMP_ETCFSTAB="/tmp/pxelinuxiso-etcfstab"
-FN_TMP_TFTPMENU="/tmp/pxelinuxiso-tftpmenu"
-FN_TMP_ETCRCLOCAL="/tmp/pxelinuxiso-etc.rc.local"
+FN_TMP_ETCEXPORTS="${FN_TMP_PREFIX}etcexports"
+FN_TMP_ETCFSTAB="${FN_TMP_PREFIX}etcfstab"
+FN_TMP_OPENWRTFSTAB="${FN_TMP_PREFIX}openwrtfstab"
+FN_TMP_TFTPMENU="${FN_TMP_PREFIX}tftpmenu"
+FN_TMP_ETCRCLOCAL="${FN_TMP_PREFIX}etc.rc.local"
 
+# parse the ISO file and setup a pxe config for it.
 tftp_setup_pxe_iso () {
     PARAM_URL1="$1"
     shift
@@ -852,7 +858,7 @@ tftp_setup_pxe_iso () {
     fi
     DIST_URL="${PARAM_URL1}"
 
-    #echo "[DBG] 1 detect_linux_dist ${DIST_URL}" >> "/dev/stderr"
+    #mr_trace "[DBG] 1 detect_linux_dist ${DIST_URL}"
     detect_linux_dist "${DIST_URL}"
     DIST_NAME_TYPE="${DECLNXOUT_NAME}"
     DIST_NAME="${DECLNXOUT_NAME}"
@@ -880,30 +886,30 @@ tftp_setup_pxe_iso () {
         DIST_TYPE="${A_DIST_TYPE}"
     fi
 
-    echo "[DBG] DIST_NAME=${DIST_NAME}" >> "/dev/stderr"
-    echo "[DBG] DIST_RELEASE=${DIST_RELEASE}" >> "/dev/stderr"
-    echo "[DBG] DIST_ARCH=${DIST_ARCH}" >> "/dev/stderr"
-    echo "[DBG] DIST_TYPE=${DIST_TYPE}" >> "/dev/stderr"
+    mr_trace "[DBG] DIST_NAME=${DIST_NAME}"
+    mr_trace "[DBG] DIST_RELEASE=${DIST_RELEASE}"
+    mr_trace "[DBG] DIST_ARCH=${DIST_ARCH}"
+    mr_trace "[DBG] DIST_TYPE=${DIST_TYPE}"
     FLG_QUIT=0
     if [ "${DIST_NAME}" = "" ]; then
         FLG_QUIT=1
-        echo "[ERR] Unable to detect the distribution name" >> "/dev/stderr"
-        echo "[ERR]   please specify by --distname option!" >> "/dev/stderr"
+        mr_trace "[ERR] Unable to detect the distribution name"
+        mr_trace "[ERR]   please specify by --distname option!"
     fi
     if [ "${DIST_RELEASE}" = "" ]; then
         FLG_QUIT=1
-        echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
-        echo "[ERR]   please specify by --distrelease option!" >> "/dev/stderr"
+        mr_trace "[ERR] Unable to detect the distribution release"
+        mr_trace "[ERR]   please specify by --distrelease option!"
     fi
     if [ "${DIST_ARCH}" = "" ]; then
         FLG_QUIT=1
-        echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
-        echo "[ERR]   please specify by --distarch option!" >> "/dev/stderr"
+        mr_trace "[ERR] Unable to detect the distribution release"
+        mr_trace "[ERR]   please specify by --distarch option!"
     fi
     if [ "${DIST_TYPE}" = "" ]; then
         FLG_QUIT=1
-        echo "[ERR] Unable to detect the distribution release" >> "/dev/stderr"
-        echo "[ERR]   please specify by --disttype option!" >> "/dev/stderr"
+        mr_trace "[ERR] Unable to detect the distribution release"
+        mr_trace "[ERR]   please specify by --disttype option!"
     fi
 
     export ISO_NAME=$(basename ${DIST_URL})
@@ -976,7 +982,7 @@ tftp_setup_pxe_iso () {
     esac
 
     # if we unable to get information correctly from the name
-    #echo "[DBG] 2 detect_linux_dist ${ISO_NAME}" >> "/dev/stderr"
+    #mr_trace "[DBG] 2 detect_linux_dist ${ISO_NAME}"
     detect_linux_dist "${ISO_NAME}"
     if [ "${DECLNXOUT_NAME}" = "" ]; then
         if [ ! "${DIST_TYPE}" = "" ]; then
@@ -994,12 +1000,12 @@ tftp_setup_pxe_iso () {
         TFTP_MENU_LABEL="${PARAM_USER_LABEL}"
     fi
 
-    echo "[DBG] ISO_NAME=${ISO_NAME}" >> "/dev/stderr"
-    echo "[DBG] DIST_MOUNTPOINT=${DIST_MOUNTPOINT}" >> "/dev/stderr"
-    echo "[DBG] DIST_FILE=${DIST_FILE}" >> "/dev/stderr"
+    mr_trace "[DBG] ISO_NAME=${ISO_NAME}"
+    mr_trace "[DBG] DIST_MOUNTPOINT=${DIST_MOUNTPOINT}"
+    mr_trace "[DBG] DIST_FILE=${DIST_FILE}"
 
     # download and check the file
-    $MYEXEC down_url "${DIST_URL}" "${DIST_FILE}"
+    $DO_EXEC down_url "${DIST_URL}" "${DIST_FILE}"
     if [ "${FLG_QUIT}" = "1" ]; then
         SZ=$(ls -s "${DIST_FILE}" | awk '{print $1}')
         if [ $(( $SZ < 100000 )) = 1 ]; then
@@ -1042,7 +1048,7 @@ tftp_setup_pxe_iso () {
         TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
 
         # automaticly check the name of the 'vmlinuz'
-        A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+        A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
         B=$(echo ${A} | awk '{print $1}' )
         TFTP_KERNEL="KERNEL ${B}"
         B=$(echo ${A} | awk '{print $2}' )
@@ -1050,7 +1056,7 @@ tftp_setup_pxe_iso () {
         ;;
 
     "debian")
-        echo "[DBG] dist debian" >> "/dev/stderr"
+        mr_trace "[DBG] dist debian"
         case "$DIST_TYPE" in
         "server")
             ;;
@@ -1062,29 +1068,29 @@ tftp_setup_pxe_iso () {
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz1"
             ;;
         *)
-            echo "[ERR] Not supported ubuntu type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported ubuntu type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
         ;;
 
     "ubuntu"|"edubuntu")
-        echo "[DBG] dist ubuntu" >> "/dev/stderr"
+        mr_trace "[DBG] dist ubuntu"
         case "$DIST_TYPE" in
         "server") # server, alternate
-            echo "[DBG] type server" >> "/dev/stderr"
+            mr_trace "[DBG] type server"
             FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz"
             TFTP_APPEND_NFS=""
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux"
 
-            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux" ]; then
-                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "*linu*" ) ; do
+            if [ ! -f "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux" ]; then
+                for i in $(find "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "*linu*" ) ; do
                     TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename $i)"
                 done
             fi
-            if [ ! -f "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz" ]; then
-                for i in $(find "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "initrd*" ) ; do
+            if [ ! -f "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz" ]; then
+                for i in $(find "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "initrd*" ) ; do
                     TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename $i)"
                 done
             fi
@@ -1098,8 +1104,8 @@ tftp_setup_pxe_iso () {
 #DIST_MOUNTPOINT="images-server/ubuntu/13.04/i386"
 #URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.8.019wtnonpa-20130429091312-e20cgo6obhlyk3fi-1/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz"
 
-#cp "${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/i386/initrd.gz" cd-initrd.gz
-#cp "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})" url-initrd.lz
+#cp "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/i386/initrd.gz" cd-initrd.gz
+#cp "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})" url-initrd.lz
 
 #mkdir cd
 #cd cd
@@ -1136,7 +1142,7 @@ tftp_setup_pxe_iso () {
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
@@ -1166,21 +1172,21 @@ tftp_setup_pxe_iso () {
                 URL_PKG3="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.8.019_-20130503212031-gaxgocw9r3bsn1mo-1/linux-headers-3.8.0-19_3.8.0-19.30_all.deb"
               fi
               if [ ! "${URL_VMLINUZ}" = "" ]; then
-                $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/"
-                $MYEXEC mkdir -p "${TFTP_ROOT}/kickstarts/"
-                $MYEXEC cd "${TFTP_ROOT}/netboot/"
-                $MYEXEC ln -s "../downloads/"
-                $MYEXEC ln -s "../kickstarts/"
-                #$MYEXEC down_url "${URL_INITRD}"
-                #$MYEXEC down_url "${URL_VMLINUZ}"
-                #$MYEXEC down_url "${URL_PKG1}"
-                #$MYEXEC down_url "${URL_PKG2}"
-                #$MYEXEC down_url "${URL_PKG3}"
-                $MYEXEC wget --no-check-certificate -c "${URL_INITRD}"  -O "${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
-                $MYEXEC wget --no-check-certificate -c "${URL_VMLINUZ}" -O "${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
-                $MYEXEC wget --no-check-certificate -c "${URL_PKG1}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
-                $MYEXEC wget --no-check-certificate -c "${URL_PKG2}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
-                $MYEXEC wget --no-check-certificate -c "${URL_PKG3}"    -O "${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
+                $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
+                $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/"
+                $DO_EXEC cd "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+                $DO_EXEC ln -s "../downloads/"
+                $DO_EXEC ln -s "../kickstarts/"
+                #$DO_EXEC down_url "${URL_INITRD}"
+                #$DO_EXEC down_url "${URL_VMLINUZ}"
+                #$DO_EXEC down_url "${URL_PKG1}"
+                #$DO_EXEC down_url "${URL_PKG2}"
+                #$DO_EXEC down_url "${URL_PKG3}"
+                $DO_EXEC wget --no-check-certificate -c "${URL_INITRD}"  -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
+                $DO_EXEC wget --no-check-certificate -c "${URL_VMLINUZ}" -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
+                $DO_EXEC wget --no-check-certificate -c "${URL_PKG1}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
+                $DO_EXEC wget --no-check-certificate -c "${URL_PKG2}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
+                $DO_EXEC wget --no-check-certificate -c "${URL_PKG3}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
 
                 TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
                 #TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
@@ -1189,7 +1195,7 @@ tftp_setup_pxe_iso () {
                 TFTP_TAG_LABEL="${TFTP_TAG_LABEL}_nonpae"
                 # kickstart:
                 FN_KS="ks-${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-nonpae.ks"
-                cat << EOF > "${TFTP_ROOT}/kickstarts/${FN_KS}"
+                cat << EOF > "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/${FN_KS}"
 %post
 #wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG1})"
 #wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG2})"
@@ -1229,7 +1235,7 @@ EOF
             ;;
 
         *)
-            echo "[ERR] Not supported ubuntu type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported ubuntu type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
@@ -1244,7 +1250,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             #B=$(echo ${A} | awk '{print $1}' )
             #TFTP_KERNEL="KERNEL ${B}"
             #B=$(echo ${A} | awk '{print $2}' )
@@ -1264,14 +1270,14 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/${ITYPE}/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
         ;;
 
     "backtrack")
         FLG_NFS=1
-        echo "[DBG] dist backtrack" >> "/dev/stderr"
+        mr_trace "[DBG] dist backtrack"
         case "$DIST_TYPE" in
         "oldlive")
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/initrd.gz"
@@ -1288,14 +1294,14 @@ EOF
             ;;
 
         *)
-            echo "[ERR] Not supported BT type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported BT type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
         ;;
 
     "kali")
-        echo "[DBG] dist kali, type=$DIST_TYPE" >> "/dev/stderr"
+        mr_trace "[DBG] dist kali, type=$DIST_TYPE"
         case "$DIST_TYPE" in
         "net"|"mini")
             FLG_NFS=0
@@ -1316,26 +1322,26 @@ EOF
             FLG_DOWNKALIFIX=0
             FN_INITRD=
             URL_INITRD=
-            $MYEXEC mkdir -p "${TFTP_ROOT}/downloads/kali1-fix/"
+            $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/kali1-fix/"
             case "$DIST_RELEASE" in
             "1.0.3")
                 FLG_NFS=1
                 if [ "${DIST_ARCH}" = "i386" ]; then
                     FN_INITRD=initrd-kali-1.0.3-3.7-trunk-686-pae.img
                     URL_INITRD="https://www.hashdump.org/files/initrd.img"
-                    echo "[WARNING] Use the i386 patch from" >> "/dev/stderr"
-                    echo "[WARNING]     https://wiki.hashdump.org/index.php/PXE::Kali" >> "/dev/stderr"
+                    mr_trace "[WARNING] Use the i386 patch from"
+                    mr_trace "[WARNING]     https://wiki.hashdump.org/index.php/PXE::Kali"
                 else
-                    echo "[ERR] Unable to boot from NFS,  please see" >> "/dev/stderr"
-                    echo "[ERR]    https://wiki.hashdump.org/index.php/PXE::Kali" >> "/dev/stderr"
-                    echo "[ERR]    for solution." >> "/dev/stderr"
+                    mr_trace "[ERR] Unable to boot from NFS,  please see"
+                    mr_trace "[ERR]    https://wiki.hashdump.org/index.php/PXE::Kali"
+                    mr_trace "[ERR]    for solution."
                     exit 0
                     FN_INITRD=initrd-kali-1.0.3-3.7-trunk-amd64.img
                     URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
                 fi
-                DN_SAVE_INITRD="${TFTP_ROOT}/downloads/kali1-fix/"
-                $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
-                $MYEXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
+                DN_SAVE_INITRD="${SYSTEM_TOP}/${TFTP_ROOT}/downloads/kali1-fix/"
+                $DO_EXEC mkdir -p "${DN_SAVE_INITRD}"
+                $DO_EXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
                 TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
                 ;;
 
@@ -1348,7 +1354,7 @@ EOF
                     FN_INITRD=initrd-kali-1.0.4-3.7-trunk-amd64.img
                 fi
                 URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
-                echo "[DBG] kali 1.0.4, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
+                mr_trace "[DBG] kali 1.0.4, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
                 ;;
 
             #"1.1.0")
@@ -1360,17 +1366,17 @@ EOF
                     #FN_INITRD=initrd-kali-1.1.0-3.18.0-kali1-amd64.img
                 #fi
                 #URL_INITRD="https://downloads.pxe-linux-iso.googlecode.com/git/patches/kali/${FN_INITRD}"
-                #echo "[DBG] kali 1.1.0, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
+                #mr_trace "[DBG] kali 1.1.0, URL=${URL_INITRD}, INITRD=${FN_INITRD}"
                 #;;
 
             esac
             if [ "${FLG_DOWNKALIFIX}" = "1" ]; then
-                echo "[WARNING] Use the ${DIST_ARCH} patch from" >> "/dev/stderr"
-                echo "[WARNING]     ${URL_INITRD}" >> "/dev/stderr"
+                mr_trace "[WARNING] Use the ${DIST_ARCH} patch from"
+                mr_trace "[WARNING]     ${URL_INITRD}"
 
-                DN_SAVE_INITRD="${TFTP_ROOT}/downloads/kali1-fix/"
-                $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
-                $MYEXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
+                DN_SAVE_INITRD="${SYSTEM_TOP}/${TFTP_ROOT}/downloads/kali1-fix/"
+                $DO_EXEC mkdir -p "${DN_SAVE_INITRD}"
+                $DO_EXEC down_url  "${URL_INITRD}" "${DN_SAVE_INITRD}/${FN_INITRD}"
                 TFTP_APPEND_INITRD="initrd=downloads/kali1-fix/${FN_INITRD}"
                 if [ "${FLG_NON_PAE}" = "1" ]; then
                     echo "Not support Kali non-PAE kernel at present," >> "${FN_TMP_LASTMSG}"
@@ -1395,7 +1401,7 @@ EOF
         ;;
 
     "fedora")
-        echo "[DBG] dist fedora" >> "/dev/stderr"
+        mr_trace "[DBG] dist fedora"
         case "$DIST_TYPE" in
         "desktop"|"live")
             #FLG_NFS=1
@@ -1406,14 +1412,14 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
             TFTP_APPEND_INITRD="initrd=${B} repo=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/ live:http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img"
             ;;
         *)
-            echo "[ERR] Not supported fedora type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported fedora type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
@@ -1436,7 +1442,7 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             B=$(echo ${A} | awk '{print $2}' )
@@ -1450,7 +1456,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
             ;;
         *)
-            echo "[ERR] Not supported centos type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported centos type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
@@ -1539,7 +1545,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/${ITYPE}/loader/linux"
             ;;
         *)
-            echo "[ERR] Not supported centos type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported centos type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
@@ -1555,7 +1561,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "arch/boot ${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "arch/boot ${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
         ;;
@@ -1572,7 +1578,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}"
 
             # automaticly check the name of the 'vmlinuz'
-            #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "${DIST_NAME}/boot ${DEFAULT_BOOTIMG_DIRS}")
+            #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DIST_NAME}/boot ${DEFAULT_BOOTIMG_DIRS}")
             #B=$(echo ${A} | awk '{print $1}' )
             #TFTP_KERNEL="KERNEL ${B}"
         ;;
@@ -1589,7 +1595,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/blackarch/boot/${ITYPE}/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${TFTP_ROOT}" "blackarch/boot ${DEFAULT_BOOTIMG_DIRS}")
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "blackarch/boot ${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | awk '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             # the default password:
@@ -1611,16 +1617,16 @@ EOF
         esac
 
         DNR_TINYCORE="downloads/tinycore-fix/"
-        $MYEXEC mkdir -p "${DN_SAVE_INITRD}"
+        $DO_EXEC mkdir -p "${DN_SAVE_INITRD}"
         FN_NFSUTILS=tinycore-${DIST_RELEASE}-nfs-utils.tcz
-        $MYEXEC down_url "http://tinycorelinux.net/4.x/${DIST_ARCH}/tcz/nfs-utils.tcz" "${TFTP_ROOT}/${DNR_TINYCORE}/${FN_NFSUTILS}"
-        echo "/${DNR_TINYCORE}/${FN_NFSUTILS}" > "${TFTP_ROOT}/${DNR_TINYCORE}/${ISO_NAME}-nfs.list"
+        $DO_EXEC down_url "http://tinycorelinux.net/4.x/${DIST_ARCH}/tcz/nfs-utils.tcz" "${SYSTEM_TOP}/${TFTP_ROOT}/${DNR_TINYCORE}/${FN_NFSUTILS}"
+        echo "/${DNR_TINYCORE}/${FN_NFSUTILS}" > "${SYSTEM_TOP}/${TFTP_ROOT}/${DNR_TINYCORE}/${ISO_NAME}-nfs.list"
         TFTP_APPEND_NFS="nfsmount=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} tftplist=${DIST_NFSIP}:/${DNR_TINYCORE}/${ISO_NAME}-nfs.list tce=${DNR_TINYCORE}"
 
         ;;
 
     "clonezilla")
-        echo "[DBG] dist fedora" >> "/dev/stderr"
+        mr_trace "[DBG] dist fedora"
         case "$DIST_TYPE" in
         "live")
             # http://clonezilla.org/livepxe.php
@@ -1637,7 +1643,7 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
             ;;
         *)
-            echo "[ERR] Not supported ISO type: ${DIST_TYPE}" >> "/dev/stderr"
+            mr_trace "[ERR] Not supported ISO type: ${DIST_TYPE}"
             exit 0
             ;;
         esac
@@ -1645,7 +1651,7 @@ EOF
 
     "puppy")
         # http://vercot.com/~serva/an/NonWindowsPXE3.html
-        #$MYEXEC wget -c http://vercot.com/~serva/download/INITRD_N01.GZ -O ${TFTP_ROOT}/downloads/puppy-initrd_n01.gz
+        #$DO_EXEC wget -c http://vercot.com/~serva/download/INITRD_N01.GZ -O ${TFTP_ROOT}/downloads/puppy-initrd_n01.gz
         #cat << EOF > "${FN_TMP_TFTPMENU}"
 #LABEL ${TFTP_TAG_LABEL}_iso
     #MENU LABEL ${TFTP_MENU_LABEL}
@@ -1655,22 +1661,22 @@ EOF
     #APPEND netpath=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/
 #EOF
         check_install_package "$(which cpio)" cpio
-        $MYEXEC rm -rf ${TFTP_ROOT}/temp
-        $MYEXEC mkdir ${TFTP_ROOT}/temp
-        $MYEXEC cd ${TFTP_ROOT}/temp
-        zcat ${TFTP_ROOT}/${DIST_MOUNTPOINT}/initrd.gz | cpio -i -d
-        $MYEXEC cp ${TFTP_ROOT}/${DIST_MOUNTPOINT}/*.sfs ${TFTP_ROOT}/temp/
-        find . | cpio -o -H newc | gzip -4 > ${TFTP_ROOT}/downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-initrd.gz
-        $MYEXEC cd ..
-        $MYEXEC rm -rf ${TFTP_ROOT}/temp
-        $MYEXEC cp ${TFTP_ROOT}/${DIST_MOUNTPOINT}/vmlinuz ${TFTP_ROOT}/downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-vmlinuz
-        $MYEXEC umount ${TFTP_ROOT}/${DIST_MOUNTPOINT}
+        $DO_EXEC rm -rf "${SYSTEM_TOP}/${TFTP_ROOT}/temp"
+        $DO_EXEC mkdir "${SYSTEM_TOP}/${TFTP_ROOT}/temp"
+        $DO_EXEC cd "${SYSTEM_TOP}/${TFTP_ROOT}/temp"
+        zcat "${SYSTEM_TOP}/${TFTP_ROOT}${TFTP_ROOT}/${DIST_MOUNTPOINT}/initrd.gz" | cpio -i -d
+        $DO_EXEC cp ${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/*.sfs "${SYSTEM_TOP}/${TFTP_ROOT}/temp/"
+        find . | cpio -o -H newc | gzip -4 > "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-initrd.gz"
+        $DO_EXEC cd ..
+        $DO_EXEC rm -rf "${SYSTEM_TOP}/${TFTP_ROOT}/temp"
+        $DO_EXEC cp "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/vmlinuz" "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-vmlinuz"
+        $DO_EXEC umount "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}"
         TFTP_KERNEL="KERNEL downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-vmlinuz"
         TFTP_APPEND_INITRD="initrd=downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-initrd.gz"
         ;;
 
     *)
-        echo "[ERR] Not supported distribution: ${DIST_NAME}" >> "/dev/stderr"
+        mr_trace "[ERR] Not supported distribution: ${DIST_NAME}"
         FLG_MOUNT=0
         #exit 0
         ;;
@@ -1696,154 +1702,185 @@ EOF
     fi
 
     if [ "${FLG_MOUNT}" = "1" ]; then
-        echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+        if [ "$OSTYPE" = "OpenWrt" ]; then # openwrt
+            echo "config mount"                      > "${FN_TMP_OPENWRTFSTAB}"
+            echo "    option enabled '1'"           >> "${FN_TMP_OPENWRTFSTAB}"
+            echo "    option options  'loop'" >> "${FN_TMP_OPENWRTFSTAB}"
+            echo "    option fstype 'iso9660'"      >> "${FN_TMP_OPENWRTFSTAB}"
+            echo "    option device '${DIST_FILE}'" >> "${FN_TMP_OPENWRTFSTAB}"
+            echo "    option target '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "${FN_TMP_OPENWRTFSTAB}"
+        else
+            echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+        fi
     fi
     if [ "${FLG_NFS}" = "1" ]; then
         echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
     fi
 
     if [ "${FLG_MOUNT}" = "1" ]; then
-        echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
-        echo "[INFO] You may want to mount the ISO by manual to test the file:" >> "/dev/stderr"
-        echo "[INFO]   mkdir -p '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
-        echo "[INFO]   mount -o loop,utf8 '${DIST_FILE}' '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "/dev/stderr"
-        echo "[INFO] The following content will be attached to the file '/etc/fstab':" >> "/dev/stderr"
-        echo "" >> "/dev/stderr"
-        cat "${FN_TMP_ETCFSTAB}" >> "/dev/stderr"
-        echo "" >> "/dev/stderr"
-        echo "[INFO] ==============================================================" >> "/dev/stderr"
+        mr_trace "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        mr_trace "[INFO] You may want to mount the ISO by manual to test the file:"
+        mr_trace "[INFO]   mkdir -p '${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}'"
+        mr_trace "[INFO]   mount -o loop,utf8 '${DIST_FILE}' '${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}'"
+        if [ "$OSTYPE" = "OpenWrt" ]; then # openwrt
+            mr_trace "[INFO] The following content will be attached to the etc/config/fstab file '${SYSTEM_TOP}/etc/config/fstab':"
+            mr_trace ""
+            cat "${FN_TMP_OPENWRTFSTAB}" | while read a; do mr_trace $a; done
+        else
+            mr_trace "[INFO] The following content will be attached to the file etc/fstab '${SYSTEM_TOP}/etc/fstab':"
+            mr_trace ""
+            cat "${FN_TMP_ETCFSTAB}" | while read a; do mr_trace $a; done
+        fi
+        mr_trace ""
+        mr_trace "[INFO] =============================================================="
     fi
 
     if [ "${FLG_NFS}" = "1" ]; then
-        echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
-        echo "[INFO] The following content will be attached to the file '/etc/exports':" >> "/dev/stderr"
-        echo "" >> "/dev/stderr"
-        cat "${FN_TMP_ETCEXPORTS}" >> "/dev/stderr"
-        echo "" >> "/dev/stderr"
-        echo "[INFO] ==============================================================" >> "/dev/stderr"
+        mr_trace "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        mr_trace "[INFO] The following content will be attached to the etc/exports file '${SYSTEM_TOP}/etc/exports':"
+        mr_trace ""
+        cat "${FN_TMP_ETCEXPORTS}" | while read a; do mr_trace $a; done
+        mr_trace ""
+        mr_trace "[INFO] =============================================================="
     fi
     if [ ! "${TFTP_APPEND_HTTP}" = "" ]; then
-        echo "You need also setup HTTP server, so that the directory '${TFTP_ROOT}' can be accessed by: " >> "/dev/stderr"
-        echo "    'http://${DIST_NFSIP}/tftpboot/'" >> "/dev/stderr"
+        mr_trace "You need also setup HTTP server, so that the directory '${TFTP_ROOT}' can be accessed by: "
+        mr_trace "    'http://${DIST_NFSIP}/tftpboot/'"
     fi
 
-    echo "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" >> "/dev/stderr"
-    echo "[INFO] The following content will be attached to the file" >> "/dev/stderr"
-    echo "[INFO]    '${TFTP_ROOT}/netboot/pxelinux.cfg/default':" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    cat "${FN_TMP_TFTPMENU}" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "[INFO] ==============================================================" >> "/dev/stderr"
+    mr_trace "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    mr_trace "[INFO] The following content will be attached to the pxelinux.cfg/default file"
+    mr_trace "[INFO]    '${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default':"
+    mr_trace ""
+    cat "${FN_TMP_TFTPMENU}" | while read a; do mr_trace $a; done
+    mr_trace ""
+    mr_trace "[INFO] =============================================================="
 
     if [ "${FLG_NOINTERACTIVE}" = "0" ]; then
         read -rsn 1 -p "Press any key to continue..."
     fi
-    #echo "[DBG] exit 0" >> "/dev/stderr"; exit 0
+    #mr_trace "[DBG] exit 0"; exit 0
     EXEC_NFSEXT=$(which exportfs)
     if [ ! -e "${EXEC_NFSEXT}" ]; then
-        $MYEXEC install_package nfs-common nfs-kernel-server portmap
-        EXEC_NFSEXT=$(which exportfs)
+        if [ "${SYSTEM_TOP}" = "/" ]; then
+            $DO_EXEC install_package nfs-common nfs-kernel-server portmap
+            EXEC_NFSEXT=$(which exportfs)
+        fi
     fi
 
-    DN_PXEBACKUP="/etc/pxelinuxisobak/"
+    DN_PXEBACKUP="${SYSTEM_TOP}/etc/pxelinuxisobak/"
     mkdir -p "${DN_PXEBACKUP}"
-    # -- ISO file mount point: /etc/fstab
-    $MYEXEC mkdir -p "${TFTP_ROOT}/${DIST_MOUNTPOINT}/"
-    $MYEXEC umount "${DIST_FILE}"
-    $MYEXEC umount "${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-    #$MYEXEC mount -o loop,utf8 "${DIST_FILE}" ${TFTP_ROOT}/${DIST_MOUNTPOINT}
-    if [ ! "${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
-        grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/fstab > /tmp/bbb
+    # -- ISO file mount point: ${SYSTEM_TOP}/etc/fstab
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/"
+    $DO_EXEC umount "${DIST_FILE}"
+    $DO_EXEC umount "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+    #$DO_EXEC mount -o loop,utf8 "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+    if [ ! "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "${SYSTEM_TOP}//" ]; then
+        grep -v "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}" ${SYSTEM_TOP}/etc/fstab > /tmp/bbb
     else
-        cp /etc/fstab /tmp/bbb
+        cp ${SYSTEM_TOP}/etc/fstab /tmp/bbb
     fi
     if [ ! "${DIST_FILE}" = "" ]; then
         grep -v "${DIST_FILE}" /tmp/bbb > /tmp/aaa
     else
         cp /tmp/bbb /tmp/aaa
     fi
-    diff -Nbu /etc/fstab /tmp/aaa
+    diff -Nbu ${SYSTEM_TOP}/etc/fstab /tmp/aaa
     RET=$?
     if [ ! "$RET" = "0" ]; then
         # backup the old fstab
-        echo "[INFO] the old /etc/fstab saved to ${DN_PXEBACKUP}/fstab-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-        $MYEXEC cp /etc/fstab "${DN_PXEBACKUP}/fstab-$(date +%Y%m%d-%H%M%S)"
+        mr_trace "[INFO] the old ${SYSTEM_TOP}/etc/fstab saved to ${DN_PXEBACKUP}/fstab-$(date +%Y%m%d-%H%M%S)"
+        $DO_EXEC cp ${SYSTEM_TOP}/etc/fstab "${DN_PXEBACKUP}/fstab-$(date +%Y%m%d-%H%M%S)"
         # update the fatab
-        $MYEXEC mv /tmp/aaa /etc/fstab
+        $DO_EXEC mv /tmp/aaa ${SYSTEM_TOP}/etc/fstab
     fi
-    $MYEXEC attach_to_file "${FN_TMP_ETCFSTAB}"   /etc/fstab
+    $DO_EXEC attach_to_file "${FN_TMP_ETCFSTAB}"   ${SYSTEM_TOP}/etc/fstab
+
+    # fstab for openwrt:
+    if [ "$OSTYPE" = "OpenWrt" ]; then # openwrt
+        mr_trace "[DBG] add to fstab for openwrt"
+        $DO_EXEC cat "${FN_TMP_OPENWRTFSTAB}" >> ${SYSTEM_TOP}/etc/config/fstab
+        if [ "${SYSTEM_TOP}" = "/" ]; then
+            $DO_EXEC ${SYSTEM_TOP}/etc/init.d/fstab enable # enable at boot
+            $DO_EXEC block umount
+            $DO_EXEC block mount # start now
+        fi
+    fi
 
     echo "mount ${TFTP_ROOT}/${DIST_MOUNTPOINT}" > "${FN_TMP_ETCRCLOCAL}"
-    grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/rc.local > /tmp/aaa
-    diff -Nbu /etc/rc.local /tmp/aaa
+    grep -v "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}" ${SYSTEM_TOP}/etc/rc.local > /tmp/aaa
+    diff -Nbu ${SYSTEM_TOP}/etc/rc.local /tmp/aaa
     RET=$?
     if [ ! "$RET" = "0" ]; then
         # backup the old rc.local
-        echo "[INFO] the old /etc/rc.local saved to ${DN_PXEBACKUP}/rc.local-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-        $MYEXEC cp /etc/rc.local "${DN_PXEBACKUP}/rc.local-$(date +%Y%m%d-%H%M%S)"
+        mr_trace "[INFO] the old ${SYSTEM_TOP}/etc/rc.local saved to ${DN_PXEBACKUP}/rc.local-$(date +%Y%m%d-%H%M%S)"
+        $DO_EXEC cp ${SYSTEM_TOP}/etc/rc.local "${DN_PXEBACKUP}/rc.local-$(date +%Y%m%d-%H%M%S)"
         # update the rc.local
-        $MYEXEC mv /tmp/aaa /etc/rc.local
+        $DO_EXEC mv /tmp/aaa ${SYSTEM_TOP}/etc/rc.local
     fi
-    $MYEXEC attach_to_file "${FN_TMP_ETCRCLOCAL}" /etc/rc.local
-    #$MYEXEC mount -a
+    $DO_EXEC attach_to_file "${FN_TMP_ETCRCLOCAL}" ${SYSTEM_TOP}/etc/rc.local
+    #$DO_EXEC mount -a
     #chmod 755 "${FN_TMP_ETCRCLOCAL}"
     . "${FN_TMP_ETCRCLOCAL}"
 
     # -- NFS
     if [ "${FLG_NFS}" = "1" ]; then
-        if [ ! "${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
-            grep -v "${TFTP_ROOT}/${DIST_MOUNTPOINT}" /etc/exports > /tmp/aaa
+        if [ ! "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}" = "/" ]; then
+            grep -v "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}" ${SYSTEM_TOP}/etc/exports > /tmp/aaa
             # backup the old exports
-            echo "[INFO] the old /etc/exports saved to ${DN_PXEBACKUP}/exports-$(date +%Y%m%d-%H%M%S)" >> "/dev/stderr"
-            $MYEXEC cp /etc/exports "${DN_PXEBACKUP}/exports-$(date +%Y%m%d-%H%M%S)"
+            mr_trace "[INFO] the old ${SYSTEM_TOP}/etc/exports saved to ${DN_PXEBACKUP}/exports-$(date +%Y%m%d-%H%M%S)"
+            $DO_EXEC cp ${SYSTEM_TOP}/etc/exports "${DN_PXEBACKUP}/exports-$(date +%Y%m%d-%H%M%S)"
             # update exports
-            $MYEXEC cp /tmp/aaa /etc/exports
+            $DO_EXEC cp /tmp/aaa ${SYSTEM_TOP}/etc/exports
         fi
-        $MYEXEC attach_to_file "${FN_TMP_ETCEXPORTS}" /etc/exports
-        #if [ -e `which systemctl` ]; then $MYEXEC sudo service nfs-kernel-server restart; fi # Debian/Ubuntu
-        #if [ -e `which systemctl` ]; then $MYEXEC service nfs restart; fi   # RedHat/CentOS
-        #if [ -e `which systemctl` ]; then $MYEXEC systemctl restart rpc-idmapd.service; fi
-        #if [ -e `which systemctl` ]; then $MYEXEC systemctl restart rpc-mountd.service; fi
-        if [ -e "${EXEC_NFSEXT}" ]; then
-            $MYEXEC ${EXEC_NFSEXT} -arv
-        fi
-        if [ -e `which systemctl` ]; then
-            $MYEXEC systemctl restart rpcbind nfs-server
+        $DO_EXEC attach_to_file "${FN_TMP_ETCEXPORTS}" ${SYSTEM_TOP}/etc/exports
+        if [ "${SYSTEM_TOP}" = "/" ]; then
+            #if [ -e `which systemctl` ]; then $DO_EXEC sudo service nfs-kernel-server restart; fi # Debian/Ubuntu
+            #if [ -e `which systemctl` ]; then $DO_EXEC service nfs restart; fi   # RedHat/CentOS
+            #if [ -e `which systemctl` ]; then $DO_EXEC systemctl restart rpc-idmapd.service; fi
+            #if [ -e `which systemctl` ]; then $DO_EXEC systemctl restart rpc-mountd.service; fi
+            if [ -e "${EXEC_NFSEXT}" ]; then $DO_EXEC ${EXEC_NFSEXT} -arv; fi
+            if [ -e `which systemctl` ]; then $DO_EXEC systemctl restart rpcbind nfs-server; fi
+            if [ -e /etc/init.d/rpcd ]; then $DO_EXEC /etc/init.d/rpcd restart; fi # openwrt
+            if [ -e /etc/init.d/nfsd ]; then $DO_EXEC /etc/init.d/nfsd restart; fi # openwrt
         fi
     fi
 
-    # -- TFTP menu: ${TFTP_ROOT}/netboot/pxelinux.cfg/default
-    $MYEXEC attach_to_file "${FN_TMP_TFTPMENU}" "${TFTP_ROOT}/netboot/pxelinux.cfg/default"
+    # -- TFTP menu: ${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default
+    $DO_EXEC attach_to_file "${FN_TMP_TFTPMENU}" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default"
 
-    # -- TFTP menu msg: ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    # -- TFTP menu msg: ${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
     if [ ! "${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_nfs" = "" ]; then
-        grep -v "${TFTP_TAG_LABEL}" ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt > /tmp/aaa
-        $MYEXEC mv /tmp/aaa ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+        grep -v "${TFTP_TAG_LABEL}" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt" > /tmp/aaa
+        $DO_EXEC mv /tmp/aaa "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt"
     fi
-    $MYEXEC echo "${TFTP_TAG_LABEL}" >> ${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
-    if [ -e /etc/init.d/tftpd-hpa ]; then $MYEXEC /etc/init.d/tftpd-hpa restart; fi # debian/ubuntu
-    if [ -e `which service`       ]; then $MYEXEC service xinetd restart; fi        # redhat/centos
-    if [ -e `which systemctl`     ]; then $MYEXEC systemctl restart tftpd.socket tftpd.service; fi # arch
+    $DO_EXEC echo "${TFTP_TAG_LABEL}" >> "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt"
+    if [ "${SYSTEM_TOP}" = "/" ]; then
+        if [ -e /etc/init.d/tftpd-hpa ]; then $DO_EXEC /etc/init.d/tftpd-hpa restart; fi # debian/ubuntu
+        if [ -e `which service`       ]; then $DO_EXEC service xinetd restart; fi        # redhat/centos
+        if [ -e `which systemctl`     ]; then $DO_EXEC systemctl restart tftpd.socket tftpd.service; fi # arch
+        if [ -e /etc/init.d/dnsmasq ];   then $DO_EXEC /etc/init.d/dnsmasq restart; fi # openwrt
+    fi
 }
 
 process_file_list () {
     #FN_MD5SUM=$1
     #shift
 
-    #echo "[DBG] begin 1" >> "/dev/stderr"
+    #mr_trace "[DBG] begin 1"
     while :
     do
-        #echo "[DBG] read 1" >> "/dev/stderr"
+        #mr_trace "[DBG] read 1"
         read TMPFN
         if [ "${TMPFN}" = "" ]; then
-            #echo "[DBG] End of TMPFN" >> "/dev/stderr"
+            #mr_trace "[DBG] End of TMPFN"
             break;
         fi
         if [ "${TITLE_BOOT}" = "" ]; then
-            echo "[DBG] tftp_setup_pxe_iso '${TMPFN}'" >> "/dev/stderr"
+            mr_trace "[DBG] tftp_setup_pxe_iso '${TMPFN}'"
             tftp_setup_pxe_iso "${TMPFN}"
         else
-            echo "[DBG] tftp_setup_pxe_iso '${TMPFN}' '${TITLE_BOOT}'" >> "/dev/stderr"
+            mr_trace "[DBG] tftp_setup_pxe_iso '${TMPFN}' '${TITLE_BOOT}'"
             tftp_setup_pxe_iso "${TMPFN}" "${TITLE_BOOT}"
         fi
     done
@@ -1857,82 +1894,83 @@ process_file_list () {
 usage () {
     PARAM_NAME="$1"
 
-    echo "${PARAM_NAME} v0.1" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Prepare the TFTP root directory for Linux distributions' ISO files" >> "/dev/stderr"
-    echo "So you can boot the installation CD/DVD from network(PXE)" >> "/dev/stderr"
-    echo "Written by yhfudev(yhfudev@gmail.com), 2013-07" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "${PARAM_NAME} [options] <url>" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Options:" >> "/dev/stderr"
-    echo "  --help            Print this message" >> "/dev/stderr"
-    echo "  --init            Init TFTP directory environment" >> "/dev/stderr"
-    echo "  --tftproot <DIR>  set the tftp root folder, default: ${TFTP_ROOT}" >> "/dev/stderr"
-    echo "  --nfsip <IP>      set NFS server IP, default: ${DIST_NFSIP}" >> "/dev/stderr"
-    echo "  --title <NAME>    set the boot title" >> "/dev/stderr"
-    echo "  --nonpae          add non-PAE for old machine" >> "/dev/stderr"
+    echo "${PARAM_NAME} v0.1" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Prepare the TFTP root directory for Linux distributions' ISO files" ${OUT_TO_STDERR}
+    echo "So you can boot the installation CD/DVD from network(PXE)" ${OUT_TO_STDERR}
+    echo "Written by yhfudev(yhfudev@gmail.com), 2013-07" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "${PARAM_NAME} [options] <url>" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Options:" ${OUT_TO_STDERR}
+    echo "  --help            Print this message" ${OUT_TO_STDERR}
+    echo "  --init            Init TFTP directory environment" ${OUT_TO_STDERR}
+    echo "  --chgroot <DIR>   set the system top directory, default: ${SYSTEM_TOP}" ${OUT_TO_STDERR}
+    echo "  --tftproot <DIR>  set the tftp root folder, default: ${TFTP_ROOT}" ${OUT_TO_STDERR}
+    echo "  --nfsip <IP>      set NFS server IP, default: ${DIST_NFSIP}" ${OUT_TO_STDERR}
+    echo "  --title <NAME>    set the boot title" ${OUT_TO_STDERR}
+    echo "  --nonpae          add non-PAE for old machine" ${OUT_TO_STDERR}
 
-    echo "  --distname <NAME> set the OS type of ISO, such as centos, ubuntu, arch" >> "/dev/stderr"
-    echo "  --distarch <NAME> set the arch of the OS, such as amd64, x86_64, i386, i686" >> "/dev/stderr"
-    echo "  --distrelease <NAME> set the distribution release, such as quantal,raring" >> "/dev/stderr"
-    echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." >> "/dev/stderr"
+    echo "  --distname <NAME> set the OS type of ISO, such as centos, ubuntu, arch" ${OUT_TO_STDERR}
+    echo "  --distarch <NAME> set the arch of the OS, such as amd64, x86_64, i386, i686" ${OUT_TO_STDERR}
+    echo "  --distrelease <NAME> set the distribution release, such as quantal,raring" ${OUT_TO_STDERR}
+    echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." ${OUT_TO_STDERR}
 
-    echo "  --nointeractive|-n  no interative" >> "/dev/stderr"
-    echo "  --simulate|-s       not do the real work, just show the info" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Features" >> "/dev/stderr"
-    echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" >> "/dev/stderr"
-    echo "  2. Can be run in Redhat/CentOS/Ubuntu/Archlinux" >> "/dev/stderr"
-    echo "  2. Support CD/DVDs of Fedora/CentOS/Debian/Ubuntu/Mint/Kali/..." >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Prerequisites" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  1. Installed NFS server. This script will append lines to file /etc/exports;" >> "/dev/stderr"
-    echo "  2. Installed TFTP server. This script will append lines to file" >> "/dev/stderr"
-    echo "     /var/lib/tftpboot/netboot/pxelinux.cfg/default;" >> "/dev/stderr"
-    echo "  3. To mount ISO files as loop device, a line will also be appended to /etc/fstab, and" >> "/dev/stderr"
-    echo "     /etc/rc.local;" >> "/dev/stderr"
-    echo "  4. Installed syslinux;" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Installation" >> "/dev/stderr"
-    echo "  Download the source files from GIT repo" >> "/dev/stderr"
-    echo "    git clone https://code.google.com/p/pxe-linux-iso/" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Initialize directories" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  This script use following tree structure to manage the ISO files:" >> "/dev/stderr"
-    echo "    /var/lib/tftpboot/" >> "/dev/stderr"
-    echo "      |-- downloads          # the downloaded CD/DVD ISO files and patches" >> "/dev/stderr"
-    echo "      |-- images-desktop     # mount points for Linux desktop distributions" >> "/dev/stderr"
-    echo "      |-- images-server      # mount points for Linux server distributions" >> "/dev/stderr"
-    echo "      |-- images-net         # mount points for netinstall" >> "/dev/stderr"
-    echo "      |-- netboot            # (tftp default directory)" >> "/dev/stderr"
-    echo "          |-- downloads      # symbol link" >> "/dev/stderr"
-    echo "          |-- images-desktop # symbol link" >> "/dev/stderr"
-    echo "          |-- images-server  # symbol link" >> "/dev/stderr"
-    echo "          |-- images-net     # symbol link" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  The following files also be initialized with default headers:" >> "/dev/stderr"
-    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/default" >> "/dev/stderr"
-    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "Examples" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  0. Help!" >> "/dev/stderr"
-    echo "    ${PARAM_NAME} --help" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  1. Initialize directories" >> "/dev/stderr"
-    echo "    sudo ${PARAM_NAME} --init" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "  2. Add entries to the PXE server" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "    2.1 Add Ubuntu mini" >> "/dev/stderr"
-    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
-    echo "    2.2 Add Kali" >> "/dev/stderr"
-    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'" >> "/dev/stderr"
-    echo "" >> "/dev/stderr"
+    echo "  --nointeractive|-n  no interative" ${OUT_TO_STDERR}
+    echo "  --simulate|-s       not do the real work, just show the info" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Features" ${OUT_TO_STDERR}
+    echo "  1. One single command line to setup a PXE entry to boot from CD/DVD" ${OUT_TO_STDERR}
+    echo "  2. Can be run in Redhat/CentOS/Ubuntu/Archlinux" ${OUT_TO_STDERR}
+    echo "  2. Support CD/DVDs of Fedora/CentOS/Debian/Ubuntu/Mint/Kali/..." ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Prerequisites" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "  1. Installed NFS server. This script will append lines to file ${SYSTEM_TOP}/etc/exports;" ${OUT_TO_STDERR}
+    echo "  2. Installed TFTP server. This script will append lines to file" ${OUT_TO_STDERR}
+    echo "     /var/lib/tftpboot/netboot/pxelinux.cfg/default;" ${OUT_TO_STDERR}
+    echo "  3. To mount ISO files as loop device, a line will also be appended to ${SYSTEM_TOP}/etc/fstab, and" ${OUT_TO_STDERR}
+    echo "     ${SYSTEM_TOP}/etc/rc.local;" ${OUT_TO_STDERR}
+    echo "  4. Installed syslinux;" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Installation" ${OUT_TO_STDERR}
+    echo "  Download the source files from GIT repo" ${OUT_TO_STDERR}
+    echo "    git clone https://code.google.com/p/pxe-linux-iso/" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Initialize directories" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "  This script use following tree structure to manage the ISO files:" ${OUT_TO_STDERR}
+    echo "    /var/lib/tftpboot/" ${OUT_TO_STDERR}
+    echo "      |-- downloads          # the downloaded CD/DVD ISO files and patches" ${OUT_TO_STDERR}
+    echo "      |-- images-desktop     # mount points for Linux desktop distributions" ${OUT_TO_STDERR}
+    echo "      |-- images-server      # mount points for Linux server distributions" ${OUT_TO_STDERR}
+    echo "      |-- images-net         # mount points for netinstall" ${OUT_TO_STDERR}
+    echo "      |-- netboot            # (tftp default directory)" ${OUT_TO_STDERR}
+    echo "          |-- downloads      # symbol link" ${OUT_TO_STDERR}
+    echo "          |-- images-desktop # symbol link" ${OUT_TO_STDERR}
+    echo "          |-- images-server  # symbol link" ${OUT_TO_STDERR}
+    echo "          |-- images-net     # symbol link" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "  The following files also be initialized with default headers:" ${OUT_TO_STDERR}
+    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/default" ${OUT_TO_STDERR}
+    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "Examples" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "  0. Help!" ${OUT_TO_STDERR}
+    echo "    ${PARAM_NAME} --help" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "  1. Initialize directories" ${OUT_TO_STDERR}
+    echo "    sudo ${PARAM_NAME} --init" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "  2. Add entries to the PXE server" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "    2.1 Add Ubuntu mini" ${OUT_TO_STDERR}
+    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
+    echo "    2.2 Add Kali" ${OUT_TO_STDERR}
+    echo "      sudo ${PARAM_NAME} --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'" ${OUT_TO_STDERR}
+    echo "" ${OUT_TO_STDERR}
 }
 
 rm -f "${FN_TMP_LIST}"
@@ -1963,6 +2001,12 @@ while [ ! "$1" = "" ]; do
     --init)
         FLG_INIT_TFTPROOT=1
         ;;
+
+    --chgroot)
+        shift
+        export SYSTEM_TOP="$1"
+        ;;
+
     --tftproot)
         shift
         export TFTP_ROOT="$1"
@@ -2001,7 +2045,7 @@ while [ ! "$1" = "" ]; do
         FLG_NON_PAE=1
         ;;
     -*)
-        echo "Use option --help to get the usages." >> "/dev/stderr"
+        echo "Use option --help to get the usages." ${OUT_TO_STDERR}
         exit 1
         ;;
     *)
@@ -2013,8 +2057,42 @@ while [ ! "$1" = "" ]; do
     shift
 done
 
-echo "[DBG] FN_FULL=$FN_FULL" >> "/dev/stderr"
-echo "[DBG] FLG_NON_PAE=$FLG_NON_PAE" >> "/dev/stderr"
+if [ ! "${SYSTEM_TOP}" = "/" ]; then
+    mr_trace "TFTP_ROOT also used in the config file, so we use prefix ${SYSTEM_TOP}/${TFTP_ROOT}"
+    #export TFTP_ROOT=${SYSTEM_TOP}/${TFTP_ROOT}
+    #export HTTPD_ROOT=${SYSTEM_TOP}/${HTTPD_ROOT}
+fi
+
+if [ ! -d "${SYSTEM_TOP}/${TFTP_ROOT}" ]; then
+    TFTP_ROOT="/media/tftpboot"
+fi
+if [ ! -d "${SYSTEM_TOP}/${TFTP_ROOT}" ]; then
+    TFTP_ROOT="/srv/tftp"
+fi
+if [ ! -d "${SYSTEM_TOP}/${TFTP_ROOT}" ]; then
+    TFTP_ROOT="/mnt/tftpboot"
+fi
+if [ ! -d "${SYSTEM_TOP}/${HTTPD_ROOT}" ]; then
+    export HTTPD_ROOT=/srv/http
+fi
+if [ ! -d "${SYSTEM_TOP}/${HTTPD_ROOT}" ]; then
+    export HTTPD_ROOT=/var/www/html
+fi
+if [ ! -d "${SYSTEM_TOP}/${HTTPD_ROOT}" ]; then
+    export HTTPD_ROOT=/www
+fi
+# Ubuntu: /usr/lib/syslinux/
+# CentOS: /usr/share/syslinux/
+if [ ! -d "${SYSLINUX_ROOT}" ]; then
+    export SYSLINUX_ROOT=/usr/share/syslinux/
+fi
+if [ ! -d "${SYSLINUX_ROOT}" ]; then
+    export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32/
+fi
+
+
+mr_trace "[DBG] FN_FULL=$FN_FULL"
+mr_trace "[DBG] FLG_NON_PAE=$FLG_NON_PAE"
 
 # attach the content of a file to the end of another file.
 attach_to_file () {
@@ -2022,72 +2100,48 @@ attach_to_file () {
         cat "$1" >> "$2"
     fi
 }
-
-FN_CMD=/dev/stderr
-FN_DBG=/dev/null
-myexec_ignore () {
-    echo "[DBG] (skip) $*" >> "${FN_CMD}"
-    echo "[DBG] (skip) $*" >> "${FN_DBG}"
-    A=
-    while [ ! "$1" = "" ]; do
-        A="$A \"$1\""
-        shift
-    done
-    #echo "[DBG] (skip) $A" >> "${FN_CMD}"
-    echo "[DBG] (skip) $A" >> "${FN_DBG}"
-}
-myexec_trace () {
-    echo "[DBG] $*" >> "${FN_CMD}"
-    echo "[DBG] $*" >> "${FN_DBG}"
-    A=
-    while [ ! "$1" = "" ]; do
-        A="$A \"$1\""
-        shift
-    done
-    #echo "[DBG] $A" >> "${FN_CMD}"
-    echo "[DBG] $A" >> "${FN_DBG}"
-    eval $A
-}
-MYEXEC=myexec_trace
-#MYEXEC=
+DO_EXEC=myexec_trace
+#DO_EXEC=
 if [ "$FLG_SIMULATE" = "1" ]; then
-    MYEXEC=myexec_ignore
+    DO_EXEC=myexec_ignore
 fi
 
-echo "[DBG] Install basic software packages ..."
+mr_trace "[DBG] Install basic software packages ..."
 
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
-  install_package gawk
+    install_package gawk
 fi
+
+
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
-  echo "[ERR] Not exist awk!" >> "/dev/stderr"
+    mr_trace "[ERR] Not exist awk!"
   exit 1
 fi
-echo | awk '{a = 1; switch(a) { case 0: break; } }'
+echo | awk '{a = 1; switch(a) { case 0: break; } }' > /dev/null 2>&1
 if [ $? = 1 ]; then
-  # patch gawk
-  install_package gawk
-fi
-
-
-EXEC_WGET="$(which wget)"
-if [ ! -x "${EXEC_WGET}" ]; then
-  echo "[DBG] Try to install wget." >> "/dev/stderr"
-  install_package wget
+    # patch gawk
+    mr_trace "[WARNING] awk not support switch() ..."
+    install_package gawk
 fi
 
 EXEC_WGET="$(which wget)"
 if [ ! -x "${EXEC_WGET}" ]; then
-  echo "[ERR] Not exist wget!" >> "/dev/stderr"
+    mr_trace "[DBG] Try to install wget."
+    install_package wget
+fi
+
+EXEC_WGET="$(which wget)"
+if [ ! -x "${EXEC_WGET}" ]; then
+  mr_trace "[ERR] Not exist wget!"
   exit 1
 fi
 
 EXEC_ENV="$(which env)"
 if [ ! -x "${EXEC_ENV}" ]; then
-  echo "[DBG] Try to install coreutils." >> "/dev/stderr"
-  install_package coreutils
+    mr_trace "[DBG] Try to install coreutils."
+    install_package coreutils
 fi
 
 tftp_init_directories
@@ -2147,23 +2201,23 @@ eeb8088f5fbf555093086c30e90f0e0d82cf7825  clonezilla-live-20131216-trusty-i386.i
 497f6b61f4265e7dadc961039167b7c2f97c97ee  slacko-5.6-4G-NON-PAE.iso
 EOF
 
-echo "[DBG] file list: ${FN_TMP_LIST}" >> "/dev/stderr"
+mr_trace "[DBG] file list: ${FN_TMP_LIST}"
 if [ -f "${FN_TMP_LIST}" ]; then
     process_file_list "" < "${FN_TMP_LIST}"
 fi
 
 #rm -f "${FN_TMP_LIST}"
-echo "Done!" >> "/dev/stderr"
-echo "Don't forget to add these lines to your DHCP server config file:"
-echo "    next-server ${DIST_NFSIP};"
-echo '    filename "/netboot/pxelinux.0"';
-echo "and restart your DHCP server!"
+mr_trace "Done!"
+mr_trace "Don't forget to add these lines to your DHCP server config file:"
+mr_trace "    next-server ${DIST_NFSIP};"
+mr_trace '    filename "/netboot/pxelinux.0"';
+mr_trace "and restart your DHCP server!"
 
 
-cat "${FN_TMP_LASTMSG}" >> "/dev/stderr"
+cat "${FN_TMP_LASTMSG}" | while read a; do mr_trace $a; done
 if [ "${FLG_NON_PAE}" = "1" ]; then
     if [ "${FLG_NON_PAE_PROCESSED}" = "0" ]; then
-        echo "[ERR] Not porcess non-PAE option!"
+        mr_trace "[ERR] Not porcess non-PAE option!"
     fi
 fi
 
@@ -2196,3 +2250,6 @@ test_down_some_iso () {
     #http://sourceforge.net/projects/clonezilla/files/clonezilla_live_alternative_testing/20131216-trusty/clonezilla-live-20131216-trusty-i386.iso
     #http://mirror.anl.gov/pub/centos/6.5/isos/x86_64/CentOS-6.5-x86_64-minimal.iso
 }
+
+# remove temp files
+rm -f ${FN_TMP_PREFIX}*
