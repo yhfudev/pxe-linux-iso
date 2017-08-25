@@ -1578,10 +1578,10 @@ EOF
             ITYPE="${DIST_ARCH}"
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/${DIST_NAME}/boot/intel_ucode.img,${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}.img"
             TFTP_APPEND_NFS="misobasedir=${DIST_NAME} miso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/ ip=dhcp"
-            #misolabel=MJRO0812 nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 logo.nologo overlay=free quiet splash showopts ip=dhcp
+            #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} misolabel=MJRO0812 nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 logo.nologo overlay=free quiet splash showopts ip=dhcp"
 
             #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
+            TFTP_APPEND_OTHER="arch=${DIST_ARCH} nomodeset nouveau.modeset=0 i915.modeset=0 radeon.modeset=0 i915.preliminary_hw_support=1"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}"
 
             # automaticly check the name of the 'vmlinuz'

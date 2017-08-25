@@ -17,11 +17,11 @@ else
 fi
 
 # detect if the ~/bin is included in environment variable $PATH
-echo $PATH | grep "~/bin"
-if [ ! "$?" = "0" ]; then
-    echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
-    export PATH=~/bin:$PATH
-fi
+#echo $PATH | grep "~/bin"
+#if [ ! "$?" = "0" ]; then
+#    echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
+#    export PATH=~/bin:$PATH
+#fi
 
 #####################################################################
 # the format of the segment file name, it seems 19 is the max value for gawk.
