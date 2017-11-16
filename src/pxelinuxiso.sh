@@ -12,6 +12,7 @@
 
 # TODO:
 #  1) low case the file name, otherwise the tftp server won't work
+#  2) update http://vercot.com/%7Eserva/an/NonWindowsPXE3.html
 
 #DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
 DN_EXEC="$(dirname $(readlink -f "$0"))"
@@ -24,6 +25,10 @@ fi
 DO_EXEC=echo
 
 . ${DN_EXEC}/libbash.sh
+
+if [ ! -x "${EXEC_AWK}" ]; then
+    EXEC_AWK="$(which gawk)"
+fi
 
 FN_TMP_PREFIX="/tmp/pxelinuxiso-"
 
@@ -82,6 +87,7 @@ BEGIN {
     dist_name="";
     dist_arch="";
     dist_type="net";
+    dist_ui="";
 }
 {
     # process url, such as "http://sample.com/path/to/unix-i386.iso"
@@ -170,6 +176,9 @@ BEGIN {
             dist_type="plus";
             dist_arch = "x86";
             break;
+        case "SL":
+            dist_name = "scientificlinux";
+            break;
 
         default:
             lstr = tolower (a[i]);
@@ -206,11 +215,19 @@ BEGIN {
             case "blackarchlinux":
                 dist_name = "blackarchlinux";
                 break;
-            case "evolution":
-                dist_name = "evolution";
+            case "antergos":
+                dist_name = "antergos";
+                dist_type="live";
                 break;
             case "manjaro":
                 dist_name = "manjaro";
+                dist_type="live";
+                break;
+            case "evolution":
+                dist_name = "evolution";
+                break;
+            case "tails":
+                dist_name = "tails";
                 dist_type="live";
                 break;
             case "ctkarchlive":
@@ -276,6 +293,14 @@ BEGIN {
             case "dvd":  # opensuse, mageia
                 flg_live = 1;
                 break;
+            case "livedvdkde": # SL
+                flg_live = 1;
+                dist_ui = "kde"
+                break;
+            case "livedvdgnome": # SL
+                flg_live = 1;
+                dist_ui = "gnome"
+                break;
             case "desktop":
                 dist_type="desktop";
                 flg_nfs=1;
@@ -326,6 +351,8 @@ BEGIN {
             case "kde":
             case "gnome":
             case "xfce": # manjaro
+                dist_ui=lstr;
+                break
             case "http:":
             case "https:":
             case "ftp:":
@@ -428,6 +455,7 @@ END {
         " release=" (""==dist_release?"unknown":dist_release) \
         " arch=" (""==dist_arch?"unknown":dist_arch) \
         " type=" (""==dist_type?"unknown":dist_type) \
+        " UI=" (""==dist_ui?"unknown":dist_ui) \
         (flg_live==0?"":"(Live)") \
         (flg_nfs==0?"":"(NFS)") \
         ;
@@ -435,6 +463,7 @@ END {
     print "DECLNXOUT_RELEASE="   dist_release    >> FN_OUTPUT
     print "DECLNXOUT_ARCH="      dist_arch       >> FN_OUTPUT
     print "DECLNXOUT_TYPE="      dist_type       >> FN_OUTPUT
+    print "DECLNXOUT_UI="        dist_ui          >> FN_OUTPUT
     print "DECLNXOUT_FLG_LIVE="  flg_live        >> FN_OUTPUT
     print "DECLNXOUT_FLG_NFS="   flg_nfs         >> FN_OUTPUT
 }
@@ -445,6 +474,7 @@ DECLNXOUT_NAME=""
 DECLNXOUT_RELEASE=""
 DECLNXOUT_ARCH=""
 DECLNXOUT_TYPE=""
+DECLNXOUT_UI=""
 DECLNXOUT_FLG_LIVE=0
 DECLNXOUT_FLG_NFS=0
 
@@ -456,6 +486,7 @@ _detect_export_values () {
     DECLNXOUT_RELEASE=""
     DECLNXOUT_ARCH=""
     DECLNXOUT_TYPE=""
+    DECLNXOUT_UI=""
     DECLNXOUT_FLG_LIVE=0
     DECLNXOUT_FLG_NFS=0
     if [ -f "${PARAM_FNOUT}" ]; then
@@ -474,11 +505,11 @@ detect_linux_dist () {
 
     FN_TMP=${FN_TMP_PREFIX}out-iso
     gen_detect_urliso_script "${FN_AWK_DET_ISO}"
-    echo "${FN_SINGLE}" | awk -v TYP=iso -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_ISO}"
+    echo "${FN_SINGLE}" | ${EXEC_AWK} -v TYP=iso -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_ISO}"
     _detect_export_values "${FN_TMP}"
     if [ "${DECLNXOUT_NAME}" = "" ]; then
         gen_detect_urliso_script "${FN_AWK_DET_URL}"
-        echo "${PARAM_URL2}" | awk -v TYP=url -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_URL}"
+        echo "${PARAM_URL2}" | ${EXEC_AWK} -v TYP=url -v FNOUT=${FN_TMP} -f "${FN_AWK_DET_URL}"
         _detect_export_values "${FN_TMP}"
     fi
 }
@@ -515,7 +546,7 @@ check_xxxsum () {
     MD5SUM_LOCAL=
     FN=$(dirname "${PARAM_RENAME1}")/${PARAM_SUMNAME}
     if [ -f "${FN}" ]; then
-        MD5SUM_LOCAL=$(grep -i "${FN_SINGLE}" "${FN}" | awk '{print $1}')
+        MD5SUM_LOCAL=$(grep -i "${FN_SINGLE}" "${FN}" | ${EXEC_AWK} '{print $1}')
         if [ ! "${MD5SUM_LOCAL}" = "" ]; then
             if [ ! "${MD5SUM_LOCAL}" = "${MD5SUM_DW}" ]; then
                 mr_trace "[DBG] MD5SUM_LOCAL($MD5SUM_LOCAL) != PARAM_STATIC_SUM($PARAM_STATIC_SUM)"
@@ -555,8 +586,8 @@ check_xxxsum () {
     fi
     if [ -f "${FN_TMP_PREFIX}md5tmp" ]; then
         mr_trace "[DBG] chk file ${FN_TMP_PREFIX}md5tmp"
-        mr_trace "[DBG] grep -i ${FN_SINGLE} ${FN_TMP_PREFIX}md5tmp | awk '{print $1}'"
-        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "${FN_TMP_PREFIX}md5tmp" | awk '{print $1}')
+        mr_trace "[DBG] grep -i ${FN_SINGLE} ${FN_TMP_PREFIX}md5tmp | ${EXEC_AWK} '{print $1}'"
+        MD5SUM_REMOTE=$(grep -i "${FN_SINGLE}" "${FN_TMP_PREFIX}md5tmp" | ${EXEC_AWK} '{print $1}')
         mr_trace "[DBG] MD5SUM_REMOTE=$MD5SUM_REMOTE"
         mr_trace "[DBG] PARAM_STATIC_SUM=$PARAM_STATIC_SUM"
         if [ ! "${MD5SUM_REMOTE}" = "" ]; then
@@ -617,7 +648,7 @@ down_url () {
     mr_trace "[DBG] PARAM_RENAME-0=$PARAM_RENAME"
 
     if [ "${PARAM_RENAME}" = "" ]; then
-        FNDOWN0=$(echo "${PARAM_URL0}" | awk -F? '{print $1}')
+        FNDOWN0=$(echo "${PARAM_URL0}" | ${EXEC_AWK} -F? '{print $1}')
 
         DN_SRCS=downloads
         PARAM_RENAME=${DN_SRCS}/$(basename "${FNDOWN0}")
@@ -629,18 +660,18 @@ down_url () {
     mr_trace "[DBG] FN_SINGLE=$FN_SINGLE"
     mr_trace "[DBG] DN_SRCS=$DN_SRCS"
 
-    MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
+    MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | ${EXEC_AWK} '{print $1}')
     FLG_DOWN=$(  check_xxxsum MD5SUMS md5sum "${MD5SUM_STATIC}" "${PARAM_RENAME}" )
     if [ "${FLG_DOWN}" = "1" ]; then
-        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | awk '{print $1}')
+        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_MD5TMP}" | ${EXEC_AWK} '{print $1}')
         FLG_DOWN=$(  check_xxxsum MD5SUM md5sum "${MD5SUM_STATIC}" "${PARAM_RENAME}" )
     fi
     if [ "${FLG_DOWN}" = "1" ]; then
-        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | awk '{print $1}')
+        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | ${EXEC_AWK} '{print $1}')
         FLG_DOWN=$(  check_xxxsum SHA1SUMS sha1sum "${MD5SUM_STATIC}" "${PARAM_RENAME}"  )
     fi
     if [ "${FLG_DOWN}" = "1" ]; then
-        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | awk '{print $1}')
+        MD5SUM_STATIC=$(grep -i "${FN_SINGLE}" "${FN_SHA1TMP}" | ${EXEC_AWK} '{print $1}')
         FLG_DOWN=$(  check_xxxsum SHA1SUM sha1sum "${MD5SUM_STATIC}" "${PARAM_RENAME}"  )
     fi
 
@@ -673,7 +704,7 @@ down_url () {
 
 tftp_init_directories () {
 
-    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg"
 
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-server/"
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-desktop/"
@@ -686,12 +717,6 @@ tftp_init_directories () {
 
     # setup downloads folder, all of the ISO files will be stored here
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
-
-    if [ ! -d "${SYSLINUX_ROOT}" ]; then
-        mr_trace "[DBG] Error in searching syslinux folder: ${SYSLINUX_ROOT}"
-        return
-    fi
-
 }
 
 tftp_init_service () {
@@ -699,25 +724,42 @@ tftp_init_service () {
     if [ "${SYSTEM_TOP}" = "/" ]; then
         install_package tftpd-hpa nfs-kernel-server dhcp3-server #bind9
     fi
-    install_package syslinux
+
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        export SYSLINUX_ROOT=/usr/share/syslinux/
+    fi
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32/
+    fi
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        export SYSLINUX_ROOT="${DN_INSTALLED_SYSLINUX}"
+    fi
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        mr_trace "[WARNING] Not found syslinux, try to install one"
+        install_package syslinux
+    fi
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        mr_trace "[DBG] Error in searching syslinux folder: ${SYSLINUX_ROOT}"
+        exit 1
+    fi
 
     tftp_init_directories
-    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/"
+    $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/"
 
     $DO_EXEC alias cp=cp
     if [ -f "${SYSLINUX_ROOT}/pxelinux.0" ]; then
-        $DO_EXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
     else
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/ldlinux.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/libutil.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/ldlinux.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/libutil.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
     fi
-    $DO_EXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-    $DO_EXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-    $DO_EXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-    $DO_EXEC cp "${SYSLINUX_ROOT}/pxechain.com" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    $DO_EXEC cp "${SYSLINUX_ROOT}/pxechain.com" "${SYSTEM_TOP}/${TFTP_ROOT}/"
 
     # 然后构建文件链接：(注意链接要使用相对链接文件所在目录的路径!)
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-server/"
@@ -726,23 +768,10 @@ tftp_init_service () {
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-live/"
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/"
-    $DO_EXEC cd "${SYSTEM_TOP}/${TFTP_ROOT}/netboot"
-    $DO_EXEC ln -sf ../images-server/ "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/images-server"
-    $DO_EXEC ln -sf ../images-desktop/
-    $DO_EXEC ln -sf ../images-net/
-    $DO_EXEC ln -sf ../images-live/
-    $DO_EXEC ln -sf ../downloads/
-    $DO_EXEC ln -sf ../kickstarts/
-    $DO_EXEC cd -
 
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${HTTPD_ROOT}"
     $DO_EXEC cd "${SYSTEM_TOP}/${HTTPD_ROOT}"
-    $DO_EXEC ln -sf "${TFTP_ROOT}/images-server/" "${SYSTEM_TOP}/${HTTPD_ROOT}/images-server"
-    $DO_EXEC ln -sf "${TFTP_ROOT}/images-desktop/"
-    $DO_EXEC ln -sf "${TFTP_ROOT}/images-net/"
-    $DO_EXEC ln -sf "${TFTP_ROOT}/images-live/"
-    $DO_EXEC ln -sf "${TFTP_ROOT}/downloads/"
-    $DO_EXEC ln -sf "${TFTP_ROOT}/kickstarts/"
+    $DO_EXEC ln -sf "${TFTP_ROOT}" "tftproot"
     $DO_EXEC cd -
 
     # set the header of configuration file
@@ -765,13 +794,13 @@ LABEL local
         LOCALBOOT 0
 
 EOF
-    $DO_EXEC mv ${FN_TMP_PREFIX}tftpdefault "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default"
+    $DO_EXEC mv ${FN_TMP_PREFIX}tftpdefault "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/default"
 
     cat > ${FN_TMP_PREFIX}tftpboot << EOF
 Available Boot Options:
 =======================
 EOF
-    $DO_EXEC mv ${FN_TMP_PREFIX}tftpboot "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt"
+    $DO_EXEC mv ${FN_TMP_PREFIX}tftpboot "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/boot.txt"
 
     rm -f ${FN_TMP_PREFIX}tftpdefault ${FN_TMP_PREFIX}tftpboot
 }
@@ -865,6 +894,7 @@ tftp_setup_pxe_iso () {
     DIST_RELEASE="${DECLNXOUT_RELEASE}"
     DIST_ARCH="${DECLNXOUT_ARCH}"
     DIST_TYPE="${DECLNXOUT_TYPE}"
+    DIST_UI="${DECLNXOUT_UI}"
     FLG_LIVE="${DECLNXOUT_FLG_LIVE}"
     DIST_NAME2="${DECLNXOUT_FLG_NFS}"
     # if use NFS to share the content of ISO
@@ -885,11 +915,15 @@ tftp_setup_pxe_iso () {
     if [ ! "${A_DIST_TYPE}" = "" ]; then
         DIST_TYPE="${A_DIST_TYPE}"
     fi
+    if [ ! "${A_DIST_UI}" = "" ]; then
+        DIST_UI="${A_DIST_UI}"
+    fi
 
     mr_trace "[DBG] DIST_NAME=${DIST_NAME}"
     mr_trace "[DBG] DIST_RELEASE=${DIST_RELEASE}"
     mr_trace "[DBG] DIST_ARCH=${DIST_ARCH}"
     mr_trace "[DBG] DIST_TYPE=${DIST_TYPE}"
+    mr_trace "[DBG] DIST_UI=${DIST_UI}"
     FLG_QUIT=0
     if [ "${DIST_NAME}" = "" ]; then
         FLG_QUIT=1
@@ -919,6 +953,7 @@ tftp_setup_pxe_iso () {
         DIST_RELEASE=""
         DIST_ARCH=""
         DIST_TYPE=""
+        DIST_UI=""
     fi
 
     case "$DIST_NAME" in
@@ -990,11 +1025,11 @@ tftp_setup_pxe_iso () {
         fi
     fi
 
-    export DIST_PATHR="${DIST_NAME}/${DIST_RELEASE}/${DIST_ARCH}"
+    export DIST_PATHR="${DIST_NAME}/${DIST_RELEASE}/${DIST_ARCH}/${DIST_UI}"
     export DIST_FILE="${TFTP_ROOT}/downloads/${ISO_NAME}"
     export DIST_MOUNTPOINT="images-${DIST_TYPE}/${DIST_PATHR}"
 
-    TFTP_TAG_LABEL="${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_${DIST_TYPE}"
+    TFTP_TAG_LABEL="${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_${DIST_TYPE}_${DIST_UI}"
     TFTP_MENU_LABEL="${TFTP_TAG_LABEL}"
     if [ ! "${PARAM_USER_LABEL}" = "" ]; then
         TFTP_MENU_LABEL="${PARAM_USER_LABEL}"
@@ -1007,7 +1042,7 @@ tftp_setup_pxe_iso () {
     # download and check the file
     $DO_EXEC down_url "${DIST_URL}" "${DIST_FILE}"
     if [ "${FLG_QUIT}" = "1" ]; then
-        SZ=$(ls -s "${DIST_FILE}" | awk '{print $1}')
+        SZ=$(ls -s "${DIST_FILE}" | ${EXEC_AWK} '{print $1}')
         if [ $(( $SZ < 100000 )) = 1 ]; then
             # we boot it from ISO image
             FLG_QUIT=0
@@ -1034,7 +1069,8 @@ tftp_setup_pxe_iso () {
     "gentoo")
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/gentoo.igz"
-            TFTP_APPEND_NFS="root=/dev/ram0 loop=/image.squashfs init=/linuxrc looptype=squashfs cdroot=1 real_root=/dev/nfs console=tty1 dokeymap netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="root=/dev/ram0 loop=/image.squashfs init=/linuxrc looptype=squashfs cdroot=1 console=tty1 dokeymap"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} real_root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/gentoo"
             ;;
@@ -1043,15 +1079,16 @@ tftp_setup_pxe_iso () {
         # debian based live cd
         FLG_NFS=1
         TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
-        TFTP_APPEND_NFS="root=/dev/nfs boot=live config netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}  locales=zh_CN.UTF-8 nox11autologin splash nomodeset video=uvesafb:mode_option=640x480-16,mtrr=3,scroll=ywrap live-media=removable persistent persistent-subtext=doudoulinux username=tux hostname=doudoulinux  quiet"
+        TFTP_APPEND_NFS="boot=live config locales=zh_CN.UTF-8 nox11autologin splash nomodeset video=uvesafb:mode_option=640x480-16,mtrr=3,scroll=ywrap live-media=removable persistent persistent-subtext=doudoulinux username=tux hostname=doudoulinux quiet"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
         #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
         TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
 
         # automaticly check the name of the 'vmlinuz'
         A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
-        B=$(echo ${A} | awk '{print $1}' )
+        B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
         TFTP_KERNEL="KERNEL ${B}"
-        B=$(echo ${A} | awk '{print $2}' )
+        B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
         TFTP_APPEND_INITRD="initrd=${B}"
         ;;
 
@@ -1063,7 +1100,8 @@ tftp_setup_pxe_iso () {
         "live")
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd1.img"
-            TFTP_APPEND_NFS="root=/dev/nfs boot=live live-config netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="boot=live live-config"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz1"
             ;;
@@ -1096,7 +1134,7 @@ tftp_setup_pxe_iso () {
             fi
 
             # for 12 or later
-            TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/install/filesystem.squashfs"
+                TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/install/filesystem.squashfs"
 
             if [ "${FLG_NON_PAE}" = "1" ]; then
 
@@ -1137,7 +1175,7 @@ tftp_setup_pxe_iso () {
             # desktop, live?
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
-            TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+                TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
@@ -1145,10 +1183,10 @@ tftp_setup_pxe_iso () {
             mr_trace "Ubuntu Desktop: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}"
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             mr_trace "Ubuntu Desktop: detect_vmlinu_initrd() return: $A"
-            B=$(echo ${A} | awk '{print $1}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             #DEBUG: if [ ! "${TFTP_KERNEL}" = "KERNEL images-desktop/ubuntu/17.04/amd64/casper/vmlinuz.efi" ]; then mr_trace "[TEST] un-expected KERNEL!"; exit 2; fi
-            B=$(echo ${A} | awk '{print $2}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
             TFTP_APPEND_INITRD="initrd=${B}"
             #DEBUG: if [ ! "${TFTP_APPEND_INITRD}" = "initrd=images-desktop/ubuntu/17.04/amd64/casper/initrd.lz" ]; then mr_trace "[TEST] un-expected initrd!"; exit 2; fi
 
@@ -1157,12 +1195,12 @@ tftp_setup_pxe_iso () {
 
             if [ "${FLG_NON_PAE}" = "1" ]; then
               URL_VMLINUZ=
-              if [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 11) print 1; else print 0; }') = 1 ]; then
+              if [ $(echo | ${EXEC_AWK} -v VER=$DIST_RELEASE '{ if (VER < 11) print 1; else print 0; }') = 1 ]; then
                 echo "Ubuntu 10 or lower support non-PAE. No need to use special steps" >> "${FN_TMP_LASTMSG}"
-              #elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 12) print 1; else print 0; }') = 1 ]; then
+              #elif [ $(echo | ${EXEC_AWK} -v VER=$DIST_RELEASE '{ if (VER < 12) print 1; else print 0; }') = 1 ]; then
                 ## version 11.x
                 #echo ""
-              elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 13) print 1; else print 0; }') = 1 ]; then
+              elif [ $(echo | ${EXEC_AWK} -v VER=$DIST_RELEASE '{ if (VER < 13) print 1; else print 0; }') = 1 ]; then
                 # version 12.x
                 URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.5.017wtnonp-20121104150059-2ifucieir3hr7d7r-1/vmlinuz-3.5.0-17-wt-non-pae_3.5.0-17.28_i386"
                 URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.5.017wtnonpa-20121104150054-x38900ty5mmg8bub-1/initrd-3.5.0-17-wt-non-pae_3.5.0-17.28_i386.lz"
@@ -1170,7 +1208,7 @@ tftp_setup_pxe_iso () {
                 URL_PKG2="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.5.027w-20130411174046-2g7c1jtopun2y43m-3/linux-headers-3.5.0-27-wt-non-pae_3.5.0-27.46_i386.deb"
                 URL_PKG3="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/linuxheaders3.5.027_-20130411174046-2g7c1jtopun2y43m-2/linux-headers-3.5.0-27_3.5.0-27.46_all.deb"
 
-              elif [ $(echo | awk -v VER=$DIST_RELEASE '{ if (VER < 14) print 1; else print 0; }') = 1 ]; then
+              elif [ $(echo | ${EXEC_AWK} -v VER=$DIST_RELEASE '{ if (VER < 14) print 1; else print 0; }') = 1 ]; then
                 # version 13.x
                 URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.8.019wtnonpa-20130429091312-e20cgo6obhlyk3fi-1/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz"
                 URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.8.019wtnonp-20130429091312-e20cgo6obhlyk3fi-5/vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386"
@@ -1181,9 +1219,6 @@ tftp_setup_pxe_iso () {
               if [ ! "${URL_VMLINUZ}" = "" ]; then
                 $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/"
                 $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/"
-                $DO_EXEC cd "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/"
-                $DO_EXEC ln -s "../downloads/"
-                $DO_EXEC ln -s "../kickstarts/"
                 #$DO_EXEC down_url "${URL_INITRD}"
                 #$DO_EXEC down_url "${URL_VMLINUZ}"
                 #$DO_EXEC down_url "${URL_PKG1}"
@@ -1252,15 +1287,16 @@ EOF
             # desktop, live?
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
-            TFTP_APPEND_NFS="showmounts toram root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=dhcp ro"
+            TFTP_APPEND_NFS="showmounts toram  boot=casper ip=dhcp ro"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
             #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
-            #B=$(echo ${A} | awk '{print $1}' )
+            #B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             #TFTP_KERNEL="KERNEL ${B}"
-            #B=$(echo ${A} | awk '{print $2}' )
+            #B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
             #TFTP_APPEND_INITRD="initrd=${B}"
         ;;
 
@@ -1278,7 +1314,7 @@ EOF
 
             # automaticly check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
-            B=$(echo ${A} | awk '{print $1}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
         ;;
 
@@ -1288,14 +1324,16 @@ EOF
         case "$DIST_TYPE" in
         "oldlive")
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/initrd.gz"
-            TFTP_APPEND_NFS="BOOT=casper boot=casper nopersistent rw quite vga=0x317 netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="BOOT=casper boot=casper nopersistent rw quite vga=0x317 "
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/vmlinuz"
             ;;
 
         "live")
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.gz"
-            TFTP_APPEND_NFS="boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="boot=casper"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
             ;;
@@ -1323,8 +1361,9 @@ EOF
 
             # NFS:
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
-            TFTP_APPEND_NFS="noconfig=sudo username=root hostname=kali root=/dev/nfs boot=live netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
+            TFTP_APPEND_NFS="noconfig=sudo username=root hostname=kali boot=live"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
 
             FLG_DOWNKALIFIX=0
             FN_INITRD=
@@ -1414,16 +1453,16 @@ EOF
             #FLG_NFS=1
             FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
-            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
 
             # automaticly check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
-            B=$(echo ${A} | awk '{print $1}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
-            B=$(echo ${A} | awk '{print $2}' )
-            TFTP_APPEND_INITRD="initrd=${B} repo=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/ live:http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img"
+            B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
+            TFTP_APPEND_INITRD="initrd=${B}"
+                TFTP_APPEND_INITRD="${TFTP_APPEND_INITRD} repo=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/ live:http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img"
             ;;
         *)
             mr_trace "[ERR] Not supported fedora type: ${DIST_TYPE}"
@@ -1442,6 +1481,9 @@ EOF
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz"
             ;;
         "net")
+            FLG_MOUNT=0
+            # following are ignored
+
             # netinstall
             FLG_NFS=0
 
@@ -1450,17 +1492,18 @@ EOF
 
             # automaticly check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
-            B=$(echo ${A} | awk '{print $1}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
-            B=$(echo ${A} | awk '{print $2}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
             TFTP_APPEND_INITRD="initrd=${B}"
             ;;
         "desktop"|"live")
             FLG_NFS=1
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
-            TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
+            TFTP_APPEND_NFS="boot=casper"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             ;;
         *)
             mr_trace "[ERR] Not supported centos type: ${DIST_TYPE}"
@@ -1469,59 +1512,7 @@ EOF
         esac
         ;;
 
-    "arch")
-            # dual option 1: load ISO to memory
-            # all of the command lines are passed
-            cat << EOF > "${FN_TMP_TFTPMENU}"
-LABEL ${TFTP_TAG_LABEL}_iso
-    MENU LABEL ${TFTP_MENU_LABEL} (ISO)
-    KERNEL memdisk
-    #LINUX memdisk
-    INITRD downloads/${ISO_NAME}
-    #APPEND iso
-    APPEND iso raw
-EOF
-
-            # dual option 2-1: NFS i686 
-            FLG_NFS=1
-            ITYPE="i686"
-            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
-            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-
-            #TFTP_APPEND_OTHER="arch=i586"
-            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
-            #cat << EOF >> "${FN_TMP_TFTPMENU}"
-#LABEL ${TFTP_TAG_LABEL}_i586
-    #MENU LABEL ${TFTP_MENU_LABEL} (i586)
-    #${TFTP_KERNEL}
-    #${TFTP_APPEND}
-#EOF
-            TFTP_APPEND_OTHER="arch=i686"
-            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
-            cat << EOF >> "${FN_TMP_TFTPMENU}"
-LABEL ${TFTP_TAG_LABEL}_i686
-    MENU LABEL ${TFTP_MENU_LABEL} (i686)
-    ${TFTP_KERNEL} nouveau.modeset=0 i915.preliminary_hw_support=1
-    ${TFTP_APPEND}
-EOF
-
-            # dual option 2-2: NFS x86_64
-            ITYPE="x86_64"
-            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
-            TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-            TFTP_APPEND_OTHER=""
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
-            TFTP_MENU_LABEL="${TFTP_MENU_LABEL} (x86_64)"
-
-            # or http?
-            # TFTP_APPEND_NFS="archisobasedir=arch archiso_pxe_http=${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-        ;;
-
-    "opensuse")
+    "scientificlinux")
         case "$DIST_TYPE" in
         "server")
             FLG_NFS=1
@@ -1529,6 +1520,34 @@ EOF
             TFTP_APPEND_NFS=""
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz"
+            ;;
+        "net")
+            FLG_MOUNT=0
+            ;;
+
+        "desktop"|"live")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
+            TFTP_APPEND_NFS="boot=casper"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            ;;
+        *)
+            mr_trace "[ERR] Not supported scientificlinux type: ${DIST_TYPE}"
+            exit 0
+            ;;
+        esac
+        ;;
+
+    "opensuse")
+        case "$DIST_TYPE" in
+        "server")
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd.img"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz"
+            TFTP_APPEND_NFS=""
             ;;
         "net")
             # netinstall
@@ -1558,35 +1577,125 @@ EOF
         esac
         ;;
 
+    "arch")
+            # dual option 1: load ISO to memory
+            # all of the command lines are passed
+            cat << EOF > "${FN_TMP_TFTPMENU}"
+LABEL ${TFTP_TAG_LABEL}_iso
+    MENU LABEL ${TFTP_MENU_LABEL} (ISO)
+    KERNEL memdisk
+    #LINUX memdisk
+    INITRD downloads/${ISO_NAME}
+    #APPEND iso
+    APPEND iso raw
+EOF
+
+            # dual option 2-1: NFS i686
+            FLG_NFS=1
+            ITYPE="i686"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
+            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
+
+            #TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="archisobasedir=arch"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+
+            #TFTP_APPEND_OTHER="arch=i586"
+            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+            #cat << EOF >> "${FN_TMP_TFTPMENU}"
+#LABEL ${TFTP_TAG_LABEL}_i586
+    #MENU LABEL ${TFTP_MENU_LABEL} (i586)
+    #${TFTP_KERNEL}
+    #${TFTP_APPEND}
+#EOF
+            TFTP_APPEND_OTHER="arch=i686"
+            TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+            cat << EOF >> "${FN_TMP_TFTPMENU}"
+LABEL ${TFTP_TAG_LABEL}_i686
+    MENU LABEL ${TFTP_MENU_LABEL} (i686)
+    ${TFTP_KERNEL} nouveau.modeset=0 i915.preliminary_hw_support=1
+    ${TFTP_APPEND}
+EOF
+
+            # dual option 2-2: NFS x86_64
+            ITYPE="x86_64"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
+            TFTP_APPEND_OTHER=""
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
+            TFTP_MENU_LABEL="${TFTP_MENU_LABEL} (x86_64)"
+
+            TFTP_APPEND_NFS="archisobasedir=arch"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+
+            # or http?
+            # TFTP_APPEND_NFS="archisobasedir=arch archiso_pxe_http=${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+        ;;
+
+    "antergos")
+            FLG_NFS=1
+            ITYPE="${DIST_ARCH}"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/archiso.img"
+            TFTP_APPEND_OTHER=""
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/vmlinuz"
+
+            TFTP_APPEND_NFS="archisobasedir=arch"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+            #TFTP_APPEND="APPEND ${TFTP_APPEND_INITRD} ${TFTP_APPEND_NFS} ${TFTP_APPEND_OTHER}"
+        ;;
+
     "archassault"|"evolution")
             FLG_NFS=1
             ITYPE="${DIST_ARCH}"
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/archiso.img"
-            TFTP_APPEND_NFS="archisobasedir=arch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
 
+            TFTP_APPEND_NFS="archisobasedir=arch "
+            case "${SVR_PROTO}" in
+            "http")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftproot/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+                ;;
+            *)
+                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+            #    ;;
+            #"nfs")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+                ;;
+            esac
+
+            #TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
             # automaticly check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "arch/boot ${DEFAULT_BOOTIMG_DIRS}")
-            B=$(echo ${A} | awk '{print $1}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
         ;;
 
     "manjaro")
             FLG_NFS=1
             ITYPE="${DIST_ARCH}"
-            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/${DIST_NAME}/boot/intel_ucode.img,${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}.img"
-            TFTP_APPEND_NFS="misobasedir=${DIST_NAME} miso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/ ip=dhcp"
-            #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} misolabel=MJRO0812 nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 logo.nologo overlay=free quiet splash showopts ip=dhcp"
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/boot/intel_ucode.img,${DIST_MOUNTPOINT}/boot/initramfs-${ITYPE}.img"
+            TFTP_APPEND_NFS="misobasedir=manjaro ip=dhcp ipv6.disable=1 copytoram=y"
+            #misolabel=MJRO0812 nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 logo.nologo overlay=free quiet splash showopts ip=dhcp
+            case "${SVR_PROTO}" in
+            "http")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_http_srv=http://${DIST_NFSIP}/tftproot/${DIST_MOUNTPOINT}"
+                ;;
+            *)
+                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+            #    ;;
+            #"nfs")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+                ;;
+            esac
 
             #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
-            TFTP_APPEND_OTHER="arch=${DIST_ARCH} nomodeset nouveau.modeset=0 i915.modeset=0 radeon.modeset=0 i915.preliminary_hw_support=1"
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/${DIST_NAME}/boot/${ITYPE}/${DIST_NAME}"
+            TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/vmlinuz-${ITYPE}"
 
             # automaticly check the name of the 'vmlinuz'
             #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DIST_NAME}/boot ${DEFAULT_BOOTIMG_DIRS}")
-            #B=$(echo ${A} | awk '{print $1}' )
+            #B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             #TFTP_KERNEL="KERNEL ${B}"
         ;;
 
@@ -1596,17 +1705,41 @@ EOF
             FLG_NFS=1
             ITYPE="${DIST_ARCH}"
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/blackarch/boot/${ITYPE}/archiso.img"
-            TFTP_APPEND_NFS="archisobasedir=blackarch archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
-            #TFTP_APPEND_HTTP="archiso_http_srv=http://${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_NFS="archisobasedir=blackarch ip=:::::eth0:dhcp"
+            case "${SVR_PROTO}" in
+            "http")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftproot/${DIST_MOUNTPOINT}"
+                ;;
+            *)
+                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+            #    ;;
+            #"nfs")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+                ;;
+            esac
             TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/blackarch/boot/${ITYPE}/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "blackarch/boot ${DEFAULT_BOOTIMG_DIRS}")
-            B=$(echo ${A} | awk '{print $1}' )
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
             # the default password:
             TFTP_MENU_LABEL=${TFTP_MENU_LABEL} root:blackarch
+        ;;
+
+    "tails")
+            FLG_MOUNT=0
+            # following are ignored
+
+            FLG_NFS=1
+            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/live/initrd.img"
+            TFTP_APPEND_OTHER=""
+            TFTP_APPEND_OTHER="${TFTP_APPEND_OTHER} boot=live config live-media=removable apparmor=1 security=apparmor nopersistence noprompt block.events_dfl_poll_msecs=1000 noautologin module=Tails kaslr slab_nomerge slub_debug=FZ mce=0 vsyscall=none ipby=dhcp ro ipv6.disable=1"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
+
+            TFTP_APPEND_NFS="netboot=cifs"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} NFSOPTS=-ouser=serva,pass=avres,sec=ntlmssp,ro"
         ;;
 
     "tinycore")
@@ -1628,7 +1761,8 @@ EOF
         FN_NFSUTILS=tinycore-${DIST_RELEASE}-nfs-utils.tcz
         $DO_EXEC down_url "http://tinycorelinux.net/4.x/${DIST_ARCH}/tcz/nfs-utils.tcz" "${SYSTEM_TOP}/${TFTP_ROOT}/${DNR_TINYCORE}/${FN_NFSUTILS}"
         echo "/${DNR_TINYCORE}/${FN_NFSUTILS}" > "${SYSTEM_TOP}/${TFTP_ROOT}/${DNR_TINYCORE}/${ISO_NAME}-nfs.list"
-        TFTP_APPEND_NFS="nfsmount=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} tftplist=${DIST_NFSIP}:/${DNR_TINYCORE}/${ISO_NAME}-nfs.list tce=${DNR_TINYCORE}"
+        TFTP_APPEND_NFS="tftplist=${DIST_NFSIP}:/${DNR_TINYCORE}/${ISO_NAME}-nfs.list tce=${DNR_TINYCORE}"
+            TFTP_APPEND_NFS="${TFTP_APPEND_NFS} nfsmount=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
 
         ;;
 
@@ -1694,7 +1828,7 @@ EOF
         cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}
     MENU LABEL ${TFTP_MENU_LABEL}
-    ${TFTP_KERNEL} nouveau.modeset=0 i915.preliminary_hw_support=1
+    ${TFTP_KERNEL} nouveau.modeset=0 i915.modeset=1 radeon.modeset=1 i915.preliminary_hw_support=1
     ${TFTP_APPEND}
 EOF
     else
@@ -1716,9 +1850,8 @@ EOF
             echo "    option fstype 'iso9660'"      >> "${FN_TMP_OPENWRTFSTAB}"
             echo "    option device '${DIST_FILE}'" >> "${FN_TMP_OPENWRTFSTAB}"
             echo "    option target '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "${FN_TMP_OPENWRTFSTAB}"
-        else
-            echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
         fi
+        echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
     fi
     if [ "${FLG_NFS}" = "1" ]; then
         echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
@@ -1733,11 +1866,10 @@ EOF
             mr_trace "[INFO] The following content will be attached to the etc/config/fstab file '${SYSTEM_TOP}/etc/config/fstab':"
             mr_trace ""
             cat "${FN_TMP_OPENWRTFSTAB}" | while read a; do mr_trace $a; done
-        else
-            mr_trace "[INFO] The following content will be attached to the file etc/fstab '${SYSTEM_TOP}/etc/fstab':"
-            mr_trace ""
-            cat "${FN_TMP_ETCFSTAB}" | while read a; do mr_trace $a; done
         fi
+        mr_trace "[INFO] The following content will be attached to the file etc/fstab '${SYSTEM_TOP}/etc/fstab':"
+        mr_trace ""
+        cat "${FN_TMP_ETCFSTAB}" | while read a; do mr_trace $a; done
         mr_trace ""
         mr_trace "[INFO] =============================================================="
     fi
@@ -1757,7 +1889,7 @@ EOF
 
     mr_trace "[INFO] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
     mr_trace "[INFO] The following content will be attached to the pxelinux.cfg/default file"
-    mr_trace "[INFO]    '${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default':"
+    mr_trace "[INFO]    '${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/default':"
     mr_trace ""
     cat "${FN_TMP_TFTPMENU}" | while read a; do mr_trace $a; done
     mr_trace ""
@@ -1853,15 +1985,15 @@ EOF
         fi
     fi
 
-    # -- TFTP menu: ${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default
-    $DO_EXEC attach_to_file "${FN_TMP_TFTPMENU}" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/default"
+    # -- TFTP menu: ${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/default
+    $DO_EXEC attach_to_file "${FN_TMP_TFTPMENU}" "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/default"
 
-    # -- TFTP menu msg: ${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt
+    # -- TFTP menu msg: ${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/boot.txt
     if [ ! "${DIST_NAME}_${DIST_RELEASE}_${DIST_ARCH}_nfs" = "" ]; then
-        grep -v "${TFTP_TAG_LABEL}" "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt" > /tmp/aaa
-        $DO_EXEC mv /tmp/aaa "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt"
+        grep -v "${TFTP_TAG_LABEL}" "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/boot.txt" > /tmp/aaa
+        $DO_EXEC mv /tmp/aaa "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/boot.txt"
     fi
-    $DO_EXEC echo "${TFTP_TAG_LABEL}" >> "${SYSTEM_TOP}/${TFTP_ROOT}/netboot/pxelinux.cfg/boot.txt"
+    $DO_EXEC echo "${TFTP_TAG_LABEL}" >> "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/boot.txt"
     if [ "${SYSTEM_TOP}" = "/" ]; then
         if [ -e /etc/init.d/tftpd-hpa ]; then $DO_EXEC /etc/init.d/tftpd-hpa restart; fi # debian/ubuntu
         if [ -e `which service`       ]; then $DO_EXEC service xinetd restart; fi        # redhat/centos
@@ -1935,7 +2067,7 @@ usage () {
     echo "" ${OUT_TO_STDERR}
     echo "  1. Installed NFS server. This script will append lines to file ${SYSTEM_TOP}/etc/exports;" ${OUT_TO_STDERR}
     echo "  2. Installed TFTP server. This script will append lines to file" ${OUT_TO_STDERR}
-    echo "     /var/lib/tftpboot/netboot/pxelinux.cfg/default;" ${OUT_TO_STDERR}
+    echo "     /var/lib/tftpboot/pxelinux.cfg/default;" ${OUT_TO_STDERR}
     echo "  3. To mount ISO files as loop device, a line will also be appended to ${SYSTEM_TOP}/etc/fstab, and" ${OUT_TO_STDERR}
     echo "     ${SYSTEM_TOP}/etc/rc.local;" ${OUT_TO_STDERR}
     echo "  4. Installed syslinux;" ${OUT_TO_STDERR}
@@ -1952,15 +2084,11 @@ usage () {
     echo "      |-- images-desktop     # mount points for Linux desktop distributions" ${OUT_TO_STDERR}
     echo "      |-- images-server      # mount points for Linux server distributions" ${OUT_TO_STDERR}
     echo "      |-- images-net         # mount points for netinstall" ${OUT_TO_STDERR}
-    echo "      |-- netboot            # (tftp default directory)" ${OUT_TO_STDERR}
-    echo "          |-- downloads      # symbol link" ${OUT_TO_STDERR}
-    echo "          |-- images-desktop # symbol link" ${OUT_TO_STDERR}
-    echo "          |-- images-server  # symbol link" ${OUT_TO_STDERR}
-    echo "          |-- images-net     # symbol link" ${OUT_TO_STDERR}
+    echo "      |-- kickstarts         # kickstart scripts" ${OUT_TO_STDERR}
     echo "" ${OUT_TO_STDERR}
     echo "  The following files also be initialized with default headers:" ${OUT_TO_STDERR}
-    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/default" ${OUT_TO_STDERR}
-    echo "      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt" ${OUT_TO_STDERR}
+    echo "      /var/lib/tftpboot/pxelinux.cfg/default" ${OUT_TO_STDERR}
+    echo "      /var/lib/tftpboot/pxelinux.cfg/boot.txt" ${OUT_TO_STDERR}
     echo "" ${OUT_TO_STDERR}
     echo "Examples" ${OUT_TO_STDERR}
     echo "" ${OUT_TO_STDERR}
@@ -1984,6 +2112,8 @@ rm -f "${FN_TMP_LIST}"
 rm -f "${FN_TMP_LASTMSG}"
 touch "${FN_TMP_LASTMSG}"
 
+# the file server protocol: nfs, http, https, ftp, tftp etc
+SVR_PROTO=nfs
 # init tftp directory?
 FLG_INIT_TFTPROOT=0
 # add non-PAE installation (for Ubuntu)
@@ -2014,6 +2144,10 @@ while [ ! "$1" = "" ]; do
         export SYSTEM_TOP="$1"
         ;;
 
+    --svrproto)
+        shift
+        export SVR_PROTO="$1"
+        ;;
     --tftproot)
         shift
         export TFTP_ROOT="$1"
@@ -2029,6 +2163,10 @@ while [ ! "$1" = "" ]; do
     --distname)
         shift
         A_DIST_NAME="$1"
+        ;;
+    --distui)
+        shift
+        A_DIST_UI="$1"
         ;;
     --distarch)
         shift
@@ -2090,21 +2228,6 @@ if [ ! -d "${SYSTEM_TOP}/${HTTPD_ROOT}" ]; then
     export HTTPD_ROOT=/www
 fi
 
-install_package syslinux
-if [ ! -d "${SYSLINUX_ROOT}" ]; then
-    export SYSLINUX_ROOT=/usr/share/syslinux/
-fi
-if [ ! -d "${SYSLINUX_ROOT}" ]; then
-    export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32/
-fi
-if [ ! -d "${SYSLINUX_ROOT}" ]; then
-    export SYSLINUX_ROOT=/tmp/syslinux-6.03/myinstall/
-fi
-if [ ! -d "${SYSLINUX_ROOT}" ]; then
-    mr_trace "[ERR] Not found syslinux"
-    exit 1
-fi
-
 
 mr_trace "[DBG] FN_FULL=$FN_FULL"
 mr_trace "[DBG] FLG_NON_PAE=$FLG_NON_PAE"
@@ -2128,13 +2251,12 @@ if [ ! -x "${EXEC_AWK}" ]; then
     install_package gawk
 fi
 
-
 EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
     mr_trace "[ERR] Not exist awk!"
   exit 1
 fi
-echo | awk '{a = 1; switch(a) { case 0: break; } }' > /dev/null 2>&1
+echo | ${EXEC_AWK} '{a = 1; switch(a) { case 0: break; } }' > /dev/null 2>&1
 if [ $? = 1 ]; then
     # patch gawk
     mr_trace "[WARNING] awk not support switch() ..."
@@ -2225,7 +2347,7 @@ fi
 mr_trace "Done!"
 mr_trace "Don't forget to add these lines to your DHCP server config file:"
 mr_trace "    next-server ${DIST_NFSIP};"
-mr_trace '    filename "/netboot/pxelinux.0"';
+mr_trace '    filename "/pxelinux.0"';
 mr_trace "and restart your DHCP server!"
 
 
@@ -2267,4 +2389,4 @@ test_down_some_iso () {
 }
 
 # remove temp files
-rm -f ${FN_TMP_PREFIX}*
+$DO_EXEC rm -f ${FN_TMP_PREFIX}*

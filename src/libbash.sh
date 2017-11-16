@@ -17,11 +17,31 @@ else
 fi
 
 # detect if the ~/bin is included in environment variable $PATH
-#echo $PATH | grep "~/bin"
-#if [ ! "$?" = "0" ]; then
-#    echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
-#    export PATH=~/bin:$PATH
-#fi
+echo $PATH | grep "~/bin"
+if [ ! "$?" = "0" ]; then
+    #echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
+    export PATH=~/bin:/sbin/:/usr/sbin/:$PATH
+fi
+
+if [ "${FN_LOG}" = "" ]; then
+    FN_LOG="/dev/stderr"
+fi
+
+# the temporary directory
+DN_TMP=/tmp/
+# check the temporary directory size
+LIST_DN=$(df | grep -v "1K-blocks" | gawk '{prefix=$6; sz=$2; if (sz<100000) {unvalid[prefix]=1;} else {unvalid[prefix]=0;} }END{for (prefix in unvalid){if ("/" == substr(prefix,length(prefix),1)) dir=prefix "tmp"; else dir=prefix "/tmp"; if ((unvalid[prefix]!="1") && (unvalid[dir]!="1")) print dir; } }')
+for DN_TMP in $LIST_DN; do
+  mkdir -p "${DN_TMP}"
+  touch "${DN_TMP}/temptest"
+  RET=$?
+  if [ "$RET" = "0" ]; then
+    rm -f "${DN_TMP}/temptest"
+    break;
+  fi
+  rm -f "${DN_TMP}/temptest"
+done
+
 
 #####################################################################
 # the format of the segment file name, it seems 19 is the max value for gawk.
@@ -30,7 +50,7 @@ PRIuSZ="%019d"
 #####################################################################
 # becareful the danger execution, such as rm -rf ...
 # use DANGER_EXEC=echo to skip all of such executions.
-DANGER_EXEC=echo
+DANGER_EXEC="echo [DryRunDanger]"
 
 FN_STDERR="/dev/stderr"
 OUT_ERR=">> ${FN_STDERR}"
@@ -84,7 +104,6 @@ DO_EXEC=mr_exec_do
 if [ "$FLG_SIMULATE" = "1" ]; then
     DO_EXEC=mr_exec_skip
 fi
-
 
 #####################################################################
 extract_file () {
@@ -233,8 +252,16 @@ extract_file () {
 #####################################################################
 EXEC_SSH="$(which ssh) -oBatchMode=yes -CX"
 EXEC_SCP="$(which scp)"
-EXEC_AWK="$(which awk)"
+EXEC_AWK="$(which gawk)"
 EXEC_SED="$(which sed)"
+
+EXEC_SUDO="$(which sudo)"
+if [ ! -x "${EXEC_SUDO}" ]; then
+    EXEC_SUDO=""
+fi
+if [ "$USER" = "root" ]; then
+    EXEC_SUDO=
+fi
 
 #####################################################################
 # System distribution detection
@@ -252,6 +279,10 @@ detect_os_type () {
     test -e /etc/fedora-release && OSTYPE="RedHat"
     which pacman 2>&1 > /dev/null && OSTYPE="Arch"
     which opkg 2>&1 > /dev/null && OSTYPE="OpenWrt"
+    which emerge 2>&1 && OSTYPE="Gentoo"
+    which zypper 2>&1 && OSTYPE="SUSE"
+    which rug 2>&1 && OSTYPE="Novell"
+    #which smart 2>&1 && OSTYPE="Smart" # http://labix.org/smart
 
     OSDIST=
     OSVERSION=
@@ -365,7 +396,9 @@ ospkgset apt-get            yum                 pacman              opkg
 ospkgset apt-file           yum                 pkgfile             opkg
 ospkgset u-boot-tools       uboot-tools         uboot-tools         uboot-envtools
 ospkgset mtd-utils          mtd-utils           mtd-utils           mtd-utils
-ospkgset build-essential    build-essential     base-devel          ""
+ospkgset initramfs-tools    initramfs-tools     mkinitcpio
+ospkgset build-essential    'Development Tools' base-devel          ""
+ospkgset devscripts         rpmdevtools         abs
 ospkgset lsb-release        redhat-lsb-core     redhat-lsb-core     ""
 ospkgset openssh-client     openssh-clients     openssh-clients     openssh-client
 ospkgset parted             parted              parted              parted
@@ -379,7 +412,31 @@ ospkgset nfs-kernel-server  nfs-utils           nfs-utils           nfs-kernel-s
 ospkgset nfs-common         nfs-utils           nfs-utils           nfs-utils
 ospkgset bind9              bind                bind                bind-server
 ospkgset portmap            portmap             ""                  portmap
-ospkgset libncurses-dev     libncurses-dev      ncurses             libncurses-dev
+ospkgset libncurses-dev     ncurses-devel       ncurses             libncurses-dev
+ospkgset kpartx             kpartx              multipath-tools
+ospkgset lib32stdc++6       libstdc++.i686      lib32-libstdc++5
+#                           libstdc++.so.6
+ospkgset lib32z1            zlib.i686           lib32-zlib
+ospkgset libjpeg62-turbo-dev libjpeg62-turbo    libjpeg-turbo
+
+ospkgset u-boot-tools       uboot-tools         uboot-tools
+ospkgset bsdtar             bsdtar              libarchive
+
+ospkgset uuid-runtime       util-linux          util-linux
+
+
+ospkgset wiringpi           wiringpi            wiringpi-git
+
+
+# fixme: fedora: pixz?
+ospkgset pixz               xz                  pixz
+
+# fix me: fedora has no equilant to qemu-user-static!  qemu-arm-static
+ospkgset qemu-user-static   qemu-user           qemu-user-static-exp
+#ospkgset qemu qemu qemu # gentoo: app-emulation/qemu
+
+# fedora, qemu provides qemu.binfmt, and the kernel already contains binfmt support
+ospkgset binfmt-support     qemu                binfmt-support
 
 ospkgset apache2            httpd               apache              apache
 #ospkgset apache2-mpm-prefork
@@ -425,7 +482,8 @@ ospkgset python-mysqldb     MySQL-python        mysql-python        python-mysql
 
 # mount loop, openwrt
 # block-mount komd-loop kmod-fs-isofs
-
+ospkgset gpsd               gpsd                gpsd
+ospkgset gpsd-clients       gpsd-clients        gpsd
 
 
 # compile gawk with switch support
@@ -463,12 +521,15 @@ patch_centos_gawk () {
     $DO_EXEC rm -rf ~/rpmbuild/BUILD/gawk-4.0.1/
 }
 
+DN_INSTALLED_SYSLINUX="${DN_TMP}/syslinux-6.03/myinstall/"
+
 # download syslinux for i686/x86_64
 # for non-intel CPU to PXE boot PC
 download_extract_2tmp_syslinux () {
     mr_trace "[DBG] download and extract syslinux for i686/x86_64 platform ..."
 
-    $DO_EXEC cd /tmp
+    $DO_EXEC mkdir -p "${DN_TMP}"
+    $DO_EXEC cd "${DN_TMP}"
     URL_REAL="https://www.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.tar.gz"
     FN_SYSLI=$(basename ${URL_REAL})
 
@@ -476,19 +537,19 @@ download_extract_2tmp_syslinux () {
 
     if [ -f "${FN_SYSLI}" ]; then
         $DO_EXEC extract_file "${FN_SYSLI}"
-        DN_SRC=/tmp/syslinux-6.03/
+        DN_SRC="${DN_TMP}/syslinux-6.03/"
         DN_INSTALL=${DN_SRC}/myinstall/
         $DO_EXEC mkdir -p "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/core/pxelinux.0"                    "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/memdisk/memdisk"                    "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/com32/elflink/ldlinux/ldlinux.c32"  "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/com32/menu/vesamenu.c32"            "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/com32/lib/libcom32.c32"             "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/com32/libutil/libutil.c32"          "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/core/pxelinux.0"                    "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/memdisk/memdisk"                    "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/elflink/ldlinux/ldlinux.c32"  "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/menu/vesamenu.c32"            "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/lib/libcom32.c32"             "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/libutil/libutil.c32"          "${DN_INSTALLED_SYSLINUX}"
 
-        $DO_EXEC cp "${DN_SRC}/bios/com32/menu/menu.c32"                "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/com32/mboot/mboot.c32"              "${DN_INSTALL}"
-        $DO_EXEC cp "${DN_SRC}/bios/com32/chain/chain.c32"              "${DN_INSTALL}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/menu/menu.c32"                "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/mboot/mboot.c32"              "${DN_INSTALLED_SYSLINUX}"
+        $DO_EXEC cp "${DN_SRC}/bios/com32/chain/chain.c32"              "${DN_INSTALLED_SYSLINUX}"
     else
         mr_trace "[ERR] not found file ${FN_SYSLI}"
     fi
@@ -499,7 +560,8 @@ download_extract_2tmp_syslinux () {
 download_extract_2tmp_syslinux_from_arch () {
     mr_trace "[DBG] download and extract syslinux for i686/x86_64 platform ..."
 
-    $DO_EXEC cd /tmp
+    $DO_EXEC mkdir -p "${DN_TMP}"
+    $DO_EXEC cd "${DN_TMP}"
 
     DATE1=$(date +%Y-%m-%d)
     $DO_EXEC rm -f index.html*
@@ -523,19 +585,160 @@ download_extract_2tmp_syslinux_from_arch () {
     $DO_EXEC cd -
 }
 
+# a wrap for "yum groupinfo" to return correct value
+yum_groupinfo() {
+    PARAM_PKG=$1
+    yum groupinfo "${PARAM_PKG}" 2>&1 | grep -i "Warning: " | grep -i "not exist." > /dev/null
+    if [ "$?" = "0" ]; then
+        #return 1
+        mkdir /a/b/c/d/e/f/
+    else
+        #return 0
+        mkdir -p /tmp
+    fi
+}
+
+# check if a group installed
+yum_groupcheck() {
+    PARAM_PKG=$1
+    yum_groupinfo "${PARAM_PKG}"
+    if [ ! "$?" = "0" ]; then
+        mkdir /a/b/c/d/e/f/
+    else
+        yes no | yum groupupdate "${PARAM_PKG}" 2>&1 | grep -i "Dependent packages" > /dev/null
+        if [ "$?" = "0" ]; then
+            #return 1
+            mkdir /a/b/c/d/e/f/
+        else
+            #return 0
+            mkdir -p /tmp
+        fi
+    fi
+}
+
+opkg_list() {
+    opkg list $1 | grep $1
+}
+
+check_available_package() {
+    local PARAM_NAME=$*
+    #local INSTALLER=`ospkgget $OSTYPE apt-get`
+    local EXEC_CHKPKG="dpkg -s"
+    local EXEC_CHKGRP="dpkg -s"
+    case "$OSTYPE" in
+    RedHat)
+        EXEC_CHKPKG="yum info"
+        EXEC_CHKGRP="yum info"
+        ;;
+
+    Arch)
+        EXEC_CHKPKG="pacman -Si"
+        EXEC_CHKGRP="pacman -Sg"
+        ;;
+    Gentoo)
+        EXEC_CHKPKG="emerge -S"
+        EXEC_CHKGRP="emerge -S"
+        ;;
+    OpenWrt)
+        EXEC_CHKPKG=opkg_list
+        EXEC_CHKGRP=opkg_list
+        ;;
+    *)
+        mr_trace "[ERR] Not supported OS: $OSTYPE"
+        exit 0
+        ;;
+    esac
+    #mr_trace "enter arch for pkgs: ${PARAM_NAME}"
+    for i in $PARAM_NAME ; do
+        #echo "enter loop arch for pkg: ${i}" >> "${FN_LOG}"
+        PKG=$(ospkgget $OSTYPE $i)
+        if [ "${PKG}" = "" ]; then
+            PKG="$i"
+        fi
+        echo "check available pkg: ${PKG}" >> "${FN_LOG}"
+        ${EXEC_CHKPKG} "${PKG}" > /dev/null
+        if [ ! "$?" = "0" ]; then
+            ${EXEC_CHKGRP} "${PKG}" > /dev/null
+            if [ ! "$?" = "0" ]; then
+                echo "fail"
+                mr_trace "check available pkg: ${PKG} return fail!"
+                return
+            fi
+        fi
+    done
+    mr_trace "check available pkg: ${PARAM_NAME} return ok!"
+    echo "ok"
+}
+
+opkg_listinstalled() {
+    opkg list-installed $1 | grep $1
+}
+
+check_installed_package() {
+    local PARAM_NAME=$*
+    #local INSTALLER=`ospkgget $OSTYPE apt-get`
+    local EXEC_CHKPKG="dpkg -s"
+    local EXEC_CHKGRP="dpkg -s"
+    case "$OSTYPE" in
+    RedHat)
+        EXEC_CHKPKG="rpm -qi"
+        EXEC_CHKGRP="yum_groupcheck"
+        ;;
+
+    Arch)
+        EXEC_CHKPKG="pacman -Qi"
+        EXEC_CHKGRP="pacman -Qg"
+        ;;
+    Gentoo)
+        EXEC_CHKPKG="emerge -pv" # and emerge -S 
+        EXEC_CHKGRP="emerge -pv" # and emerge -S 
+        ;;
+    OpenWrt)
+        EXEC_CHKPKG=opkg_listinstalled
+        EXEC_CHKGRP=opkg_listinstalled
+        ;;
+    *)
+        mr_trace "[ERR] Not supported OS: $OSTYPE"
+        exit 0
+        ;;
+    esac
+    #mr_trace "enter arch for pkgs: ${PARAM_NAME}"
+    for i in $PARAM_NAME ; do
+        #mr_trace "enter loop arch for pkg: ${i}"
+        PKG0=$(echo "$i" | awk -F\> '{print $1}')
+        PKG=$(ospkgget $OSTYPE $PKG0)
+        if [ "${PKG}" = "" ]; then
+            PKG="${PKG0}"
+        fi
+        mr_trace "check installed pkg: ${PKG}"
+        ${EXEC_CHKPKG} "${PKG}" > /dev/null
+        if [ ! "$?" = "0" ]; then
+            ${EXEC_CHKGRP} "${PKG}" > /dev/null
+            if [ ! "$?" = "0" ]; then
+                echo "fail"
+                mr_trace "check installed pkg: ${PKG} return fail!"
+                return
+            fi
+        fi
+    done
+    mr_trace "check installed pkg: ${PARAM_NAME} return ok!"
+    echo "ok"
+#set +x
+}
+
 # 安装软件包，使用debian 的发行名，自动转换成其他系统下的名字。
 # 如果是 gawk 或 syslinux 则判断处理
 install_package () {
-    PARAM_NAME=$*
-    INSTALLER=`ospkgget $OSTYPE apt-get`
+    local PARAM_NAME=$*
+    local INSTALLER=`ospkgget $OSTYPE apt-get`
 
     mr_trace ospkgget $OSTYPE apt-get
     mr_trace "INSTALLER=${INSTALLER}"
 
-    PKGLST=
-    FLG_GAWK_RH=0
+    local PKGLST=
+    local FLG_GAWK_RH=0
     for i in $PARAM_NAME ; do
-        PKG=$(ospkgget $OSTYPE $i)
+        local PKG=$(ospkgget $OSTYPE $i)
         if [ "${PKG}" = "" ]; then
             PKG="$i"
         fi
@@ -543,7 +746,7 @@ install_package () {
         if [ "$i" = "gawk" ]; then
             if [ "$OSTYPE" = "RedHat" ]; then
                 mr_trace "[DBG] patch gawk to support 'switch'"
-                echo | awk '{a = 1; switch(a) { case 0: break; } }'
+                echo | awk '{a = 1; switch(a) { case 0: break; } }' > /dev/null
                 if [ $? = 1 ]; then
                     FLG_GAWK_RH=1
                     PKG="rpmdevtools libsigsegv-devel readline-devel"
@@ -566,7 +769,7 @@ install_package () {
                 ;;
 
             *)
-                mr_trace "[DBG] Arch $MACH yet another installation of $i"
+                mr_trace "[DBG] $MACH yet another installation of $i"
                 mr_trace "[DBG] Download package for $MACH"
                 download_extract_2tmp_syslinux
                 ;;
@@ -575,10 +778,10 @@ install_package () {
         PKGLST="${PKGLST} ${PKG}"
     done
 
-    INST_OPTS=""
+    local INST_OPTS=""
     case "$OSTYPE" in
     Debian)
-        INST_OPTS="install -y"
+        INST_OPTS="install -y --force-yes"
         ;;
 
     RedHat)
@@ -588,9 +791,9 @@ install_package () {
     Arch)
         INST_OPTS="-S"
         # install loop module
-        lsmod | grep loop
+        lsmod | grep loop > /dev/null
         if [ "$?" != "0" ]; then
-            modprobe loop
+            modprobe loop > /dev/null
 
             grep -Hrn loop /etc/modules-load.d/
             if [ "$?" != "0" ]; then
@@ -614,6 +817,84 @@ install_package () {
         patch_centos_gawk
     fi
 }
+
+install_package_skip_installed() {
+    local PARAM_NAME=$*
+
+    local RET=0
+    for PKG1x5 in $PARAM_NAME ; do
+        RET=$(check_installed_package ${PKG1x5})
+        if [ ! "$RET" = "ok" ]; then
+            install_package ${PKG1x5}
+        fi
+    done
+}
+
+install_arch_yaourt () {
+    wget https://aur.archlinux.org/packages/ya/yaourt/yaourt.tar.gz
+
+    pacman -Qi package-query >> /dev/null
+    if [ ! "$?" = "0" ]; then
+        wget https://aur.archlinux.org/packages/pa/package-query/package-query.tar.gz
+        tar -xf package-query.tar.gz \
+            && cd package-query \
+            && makepkg -Asf \
+            && ${EXEC_SUDO} pacman -U ./package-query-*.xz \
+            && cd ..
+    fi
+
+    tar -xf yaourt.tar.gz \
+        && cd yaourt \
+        && makepkg -Asf \
+        && ${EXEC_SUDO} pacman -U ./yaourt-*.xz \
+        && cd ..
+}
+
+install_package_alt () {
+    PARAM_NAME=$*
+    INSTALLER=`ospkgget $OSTYPE apt-get`
+
+    INST_OPTS=""
+    case "$OSTYPE" in
+    Debian)
+        INST_OPTS="install -y --force-yes"
+        ;;
+
+    RedHat)
+        INST_OPTS="groupinstall -y"
+        ;;
+
+    Arch)
+        if [ ! -x "$(which yaourt)" ]; then
+            install_arch_yaourt >> "${FN_LOG}"
+        fi
+        if [ ! -x "$(which yaourt)" ]; then
+            echo "Error in get yaourt!" >> "${FN_LOG}"
+            exit 1
+        fi
+        INSTALLER="yaourt"
+        INST_OPTS=""
+        ;;
+    *)
+        echo "[ERR] Not supported OS: $OSTYPE" >> "${FN_LOG}"
+        exit 0
+        ;;
+    esac
+    for i in $PARAM_NAME ; do
+        PKG=$(ospkgget $OSTYPE $i)
+        if [ "${PKG}" = "" ]; then
+            PKG="$i"
+        fi
+        echo "try to install 3rd packages: ${PKG}" >> "${FN_LOG}"
+        ${EXEC_SUDO} $INSTALLER ${INST_OPTS} "${PKG}" >> "${FN_LOG}"
+        if [ ! "$?" = "0" ]; then
+            echo "fail"
+            return
+        fi
+    done
+    echo "ok"
+}
+
 
 # check if command is not exist, then install the package
 check_install_package () {
@@ -668,11 +949,6 @@ EXEC_AWK="$(which gawk)"
 if [ ! -x "${EXEC_AWK}" ]; then
     mr_trace "[ERR] Not exist awk!"
     exit 1
-fi
-
-EXEC_SUDO="$(which sudo)"
-if [ ! -x "${EXEC_SUDO}" ]; then
-    EXEC_SUDO=""
 fi
 
 ############################################################
