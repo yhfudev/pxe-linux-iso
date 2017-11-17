@@ -78,19 +78,21 @@ Initialize directories
 Examples
 --------
   * Help!
-
-    ./pxelinuxiso.sh --help
+```bash
+./pxelinuxiso.sh --help
+```
 
   * Initialize directories
-
-    sudo ./pxelinuxiso.sh --init
-
+```bash
+sudo ./pxelinuxiso.sh --init
+```
   * Add entries to the PXE server
 
     -- Add Ubuntu mini
-
-      sudo ./pxelinuxiso.sh --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'
-
+```bash
+sudo ./pxelinuxiso.sh --nfsip 192.168.1.1 'http://mirror.anl.gov/pub/ubuntu/dists/quantal/main/installer-amd64/current/images/netboot/mini.iso'
+```
     -- Add Kali
-
-      sudo ./pxelinuxiso.sh --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'
+```bash
+sudo ./pxelinuxiso.sh --nfsip 192.168.1.1 --title 'Kali' 'http://archive-5.kali.org/kali-images/kali-linux-1.0.4-amd64.iso'
+```
