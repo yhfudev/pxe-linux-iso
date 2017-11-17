@@ -1,12 +1,17 @@
 #!/bin/bash
-# bash library
-# some useful bash script functions:
-#   ssh
-#   IPv4 address handle
-#   install functions for RedHat/CentOS/Ubuntu/Arch
+# -*- tab-width: 4; encoding: utf-8 -*-
 #
-# Copyright 2013 Yunhui Fu
-# License: GPL v3.0 or later
+#####################################################################
+## @file
+## @brief bash library
+##   some useful bash script functions:
+##     ssh
+##     IPv4 address handle
+##     install functions for RedHat/CentOS/Ubuntu/Arch
+## @author Yunhui Fu <yhfudev@gmail.com>
+## @copyright GPL v3.0 or later
+## @version 1
+##
 #####################################################################
 #DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
 DN_EXEC="$(dirname "$0")"
@@ -17,31 +22,11 @@ else
 fi
 
 # detect if the ~/bin is included in environment variable $PATH
-echo $PATH | grep "~/bin"
-if [ ! "$?" = "0" ]; then
-    #echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
-    export PATH=~/bin:/sbin/:/usr/sbin/:$PATH
-fi
-
-if [ "${FN_LOG}" = "" ]; then
-    FN_LOG="/dev/stderr"
-fi
-
-# the temporary directory
-DN_TMP=/tmp/
-# check the temporary directory size
-LIST_DN=$(df | grep -v "1K-blocks" | gawk '{prefix=$6; sz=$2; if (sz<100000) {unvalid[prefix]=1;} else {unvalid[prefix]=0;} }END{for (prefix in unvalid){if ("/" == substr(prefix,length(prefix),1)) dir=prefix "tmp"; else dir=prefix "/tmp"; if ((unvalid[prefix]!="1") && (unvalid[dir]!="1")) print dir; } }')
-for DN_TMP in $LIST_DN; do
-  mkdir -p "${DN_TMP}"
-  touch "${DN_TMP}/temptest"
-  RET=$?
-  if [ "$RET" = "0" ]; then
-    rm -f "${DN_TMP}/temptest"
-    break;
-  fi
-  rm -f "${DN_TMP}/temptest"
-done
-
+#echo $PATH | grep "~/bin"
+#if [ ! "$?" = "0" ]; then
+#    #echo 'PATH=~/bin/:$PATH' >> ~/.bashrc
+#    export PATH=~/bin:/sbin/:/usr/sbin/:$PATH
+#fi
 
 #####################################################################
 # the format of the segment file name, it seems 19 is the max value for gawk.
@@ -59,23 +44,55 @@ if [ ! -f "$FN_STDERR" ]; then
     FN_STDERR="/dev/null"
 fi
 
-FN_LOG0=mrtrace.log
-mr_trace () {
-    echo "$(date +"%Y-%m-%d %H:%M:%S,%N" | cut -c1-23) [self=${BASHPID},$(basename $0)] $@" | tee -a ${FN_LOG0} 1>&2
+# the temporary directory
+DN_TMP=/tmp/
+# check the temporary directory size
+LIST_DN=$(df | grep -v "1K-blocks" | gawk '{prefix=$6; sz=$2; if (sz<100000) {unvalid[prefix]=1;} else {unvalid[prefix]=0;} }END{for (prefix in unvalid){if ("/" == substr(prefix,length(prefix),1)) dir=prefix "tmp"; else dir=prefix "/tmp"; if ((unvalid[prefix]!="1") && (unvalid[dir]!="1")) print dir; } }')
+for DN_TMP in $LIST_DN; do
+  mkdir -p "${DN_TMP}"
+  touch "${DN_TMP}/temptest"
+  RET=$?
+  if [ "$RET" = "0" ]; then
+    rm -f "${DN_TMP}/temptest"
+    break;
+  fi
+  rm -f "${DN_TMP}/temptest"
+done
+
+if [ "${FN_LOG}" = "" ]; then
+    FN_LOG=mrtrace.log
+    #FN_LOG="/dev/stderr"
+fi
+
+if [ "${FN_LOG}" = "" ]; then
+    FN_LOG="/dev/stderr"
+fi
+
+## @fn mr_trace()
+## @brief print a trace message
+## @param msg the message
+##
+## pass a message to log file, and also to stdout
+mr_trace() {
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename $0)] $@" | tee -a ${FN_LOG} 1>&2
 }
 
-fatal_error () {
-  PARAM_MSG="$1"
-  mr_trace "Fatal error: ${PARAM_MSG}" 1>&2
-  #exit 1
-}
-
-mr_exec_do () {
+## @fn mr_exec_do()
+## @brief execute a command line
+## @param cmd the command line
+##
+## execute a command line, and also log the line
+mr_exec_do() {
     mr_trace "$@"
-    $@
+    eval "$@"
 }
 
-mr_exec_skip () {
+## @fn mr_exec_skip()
+## @brief skip a command line
+## @param cmd the command line
+##
+## skip a command line, and also log the line
+mr_exec_skip() {
     mr_trace "DEBUG (skip) $@"
 }
 
@@ -104,6 +121,16 @@ DO_EXEC=mr_exec_do
 if [ "$FLG_SIMULATE" = "1" ]; then
     DO_EXEC=mr_exec_skip
 fi
+
+## @fn fatal_error()
+## @brief log a fatal error
+## @param msg the message
+##
+fatal_error() {
+  PARAM_MSG="$1"
+  mr_trace "Fatal error: ${PARAM_MSG}" 1>&2
+  #exit 1
+}
 
 #####################################################################
 extract_file () {
@@ -272,7 +299,12 @@ OSDIST=unknown
 OSVERSION=unknown
 OSNAME=unknown
 
-detect_os_type () {
+#####################################################################
+## @fn detect_os_type()
+## @brief detect the OS type
+##
+## detect the OS type, such as RedHat, Debian, Ubuntu, Arch, OpenWrt etc.
+detect_os_type() {
     test -e /etc/debian_version && OSDIST="Debian" && OSTYPE="Debian"
     grep Ubuntu /etc/lsb-release &> /dev/null && OSDIST="Ubuntu" && OSTYPE="Debian"
     test -e /etc/redhat-release && OSTYPE="RedHat"
@@ -348,41 +380,69 @@ detect_os_type () {
     export OSNAME
 }
 
-hput () {
-  KEY=`echo "$1" | tr '[:punct:][:blank:]-' '_'`
+#####################################################################
+## @fn hput()
+## @brief put a value to hash table
+## @param key the key
+## @param value the value
+##
+## put a value to hash table
+hput() {
+  local KEY=`echo "$1" | tr '[:punct:][:blank:]-' '_'`
   eval export hash"$KEY"='$2'
 }
 
-hget () {
-  KEY=`echo "$1" | tr '[:punct:][:blank:]-' '_'`
+## @fn hget()
+## @brief get a value from hash table
+## @param key the key
+##
+## get a value from hash table
+hget() {
+  local KEY=`echo "$1" | tr '[:punct:][:blank:]-' '_'`
   eval echo '${hash'"$KEY"'#hash}'
 }
 
+## @fn hiter()
+## @brief list all of values in the hash table
+##
 hiter() {
     for h in $(eval echo '${!'$1'*}') ; do
-        key=${h#$1*}
+        local key=${h#$1*}
         echo "$key=`hget $key`"
     done
 }
 
+## @fn ospkgset()
+## @brief set package name mapping
+## @param key the key package name (Debian)
+## @param vredhat the map package name for RedHat
+## @param varch the map package name for Arch
+##
+## set package name mapping for debian,redhat,arch
 ospkgset() {
-    PARAM_KEY=$1
+    local PARAM_KEY=$1
     shift
-    PARAM_REDHAT=$1
+    local PARAM_REDHAT=$1
     shift
-    PARAM_ARCH=$1
+    local PARAM_ARCH=$1
     shift
-    PARAM_OPENWRT=$1
+    local PARAM_OPENWRT=$1
     shift
     hput "pkg_RedHat_$PARAM_KEY" "$PARAM_REDHAT"
     hput "pkg_Arch_$PARAM_KEY" "$PARAM_ARCH"
     hput "pkg_OpenWrt_$PARAM_KEY" "$PARAM_OPENWRT"
 }
 
-ospkgget () {
-    PARAM_OS=$1
+## @fn ospkgget()
+## @brief get package name mapping
+## @param os the OS name. RedHat or Arch
+## @param key the key package name (Debian)
+##
+## get package name mapping for debian,redhat,arch
+ospkgget() {
+    local PARAM_OS=$1
     shift
-    PARAM_KEY=$1
+    local PARAM_KEY=$1
     shift
     if [ "$PARAM_OS" = "Debian" ]; then
         echo "${PARAM_KEY}"
@@ -485,12 +545,15 @@ ospkgset python-mysqldb     MySQL-python        mysql-python        python-mysql
 ospkgset gpsd               gpsd                gpsd
 ospkgset gpsd-clients       gpsd-clients        gpsd
 
-
-# compile gawk with switch support
-# and install to system
-# WARNING: the CentOS boot program depend the awk, and if the system upgrade the gawk again,
-#   new installed gawk will not support 
-patch_centos_gawk () {
+## @fn patch_centos_gawk()
+## @brief compile gawk with switch support
+## @param os the OS name. RedHat or Arch
+## @param key the key package name (Debian)
+##
+## compile gawk with switch support and install it to system.
+##   WARNING: the CentOS boot program depend the awk, and if the system upgrade the gawk again,
+##   new installed gawk will not support
+patch_centos_gawk() {
     $DO_EXEC yum -y install rpmdevtools readline-devel #libsigsegv-devel
     $DO_EXEC yum -y install gcc byacc
     $DO_EXEC rpmdev-setuptree
@@ -499,7 +562,7 @@ patch_centos_gawk () {
     #URL="http://archive.fedoraproject.org/pub/archive/fedora/linux/updates/14/SRPMS/gawk-3.1.8-3.fc14.src.rpm"
     FILELIST="gawk.spec gawk-4.0.1.tar.gz"
     URL="http://archive.fedoraproject.org/pub/archive/fedora/linux/updates/17/SRPMS/gawk-4.0.1-1.fc17.src.rpm"
-    cd ~/rpmbuild/SOURCES/; rm -f ${FILELIST}; cd - ; rm -f ${FILELIST}
+    cd ~/rpmbuild/SOURCES/; rm -f ${FILELIST}; cd - > /dev/null; rm -f ${FILELIST}
     $DO_EXEC wget -c "${URL}" -O ~/rpmbuild/SRPMS/$(basename "${URL}")
     $DO_EXEC rpm2cpio ~/rpmbuild/SRPMS/$(basename "${URL}") | cpio -div
     $DO_EXEC mv ${FILELIST} ~/rpmbuild/SOURCES/
@@ -523,8 +586,10 @@ patch_centos_gawk () {
 
 DN_INSTALLED_SYSLINUX="${DN_TMP}/syslinux-6.03/myinstall/"
 
-# download syslinux for i686/x86_64
-# for non-intel CPU to PXE boot PC
+## @fn download_extract_2tmp_syslinux()
+## @brief download syslinux files
+##
+## download the syslinux files for non-x86 platforms
 download_extract_2tmp_syslinux () {
     mr_trace "[DBG] download and extract syslinux for i686/x86_64 platform ..."
 
@@ -585,7 +650,9 @@ download_extract_2tmp_syslinux_from_arch () {
     $DO_EXEC cd -
 }
 
-# a wrap for "yum groupinfo" to return correct value
+## @fn yum_groupinfo()
+## @brief a wrap for "yum groupinfo" to return correct value
+## @param name the package names
 yum_groupinfo() {
     PARAM_PKG=$1
     yum groupinfo "${PARAM_PKG}" 2>&1 | grep -i "Warning: " | grep -i "not exist." > /dev/null
@@ -598,7 +665,9 @@ yum_groupinfo() {
     fi
 }
 
-# check if a group installed
+## @fn yum_groupcheck()
+## @brief check if a group installed
+## @param name the package names
 yum_groupcheck() {
     PARAM_PKG=$1
     yum_groupinfo "${PARAM_PKG}"
@@ -620,6 +689,9 @@ opkg_list() {
     opkg list $1 | grep $1
 }
 
+## @fn check_available_package()
+## @brief check if the packages exist
+## @param name the package names
 check_available_package() {
     local PARAM_NAME=$*
     #local INSTALLER=`ospkgget $OSTYPE apt-get`
@@ -650,12 +722,12 @@ check_available_package() {
     esac
     #mr_trace "enter arch for pkgs: ${PARAM_NAME}"
     for i in $PARAM_NAME ; do
-        #echo "enter loop arch for pkg: ${i}" >> "${FN_LOG}"
+        #mr_trace "enter loop arch for pkg: ${i}"
         PKG=$(ospkgget $OSTYPE $i)
         if [ "${PKG}" = "" ]; then
             PKG="$i"
         fi
-        echo "check available pkg: ${PKG}" >> "${FN_LOG}"
+        mr_trace "check available pkg: ${PKG}"
         ${EXEC_CHKPKG} "${PKG}" > /dev/null
         if [ ! "$?" = "0" ]; then
             ${EXEC_CHKGRP} "${PKG}" > /dev/null
@@ -674,6 +746,9 @@ opkg_listinstalled() {
     opkg list-installed $1 | grep $1
 }
 
+## @fn check_installed_package()
+## @brief check if the packages installed
+## @param name the package names
 check_installed_package() {
     local PARAM_NAME=$*
     #local INSTALLER=`ospkgget $OSTYPE apt-get`
@@ -690,8 +765,8 @@ check_installed_package() {
         EXEC_CHKGRP="pacman -Qg"
         ;;
     Gentoo)
-        EXEC_CHKPKG="emerge -pv" # and emerge -S 
-        EXEC_CHKGRP="emerge -pv" # and emerge -S 
+        EXEC_CHKPKG="emerge -pv" # and emerge -S
+        EXEC_CHKGRP="emerge -pv" # and emerge -S
         ;;
     OpenWrt)
         EXEC_CHKPKG=opkg_listinstalled
@@ -726,9 +801,13 @@ check_installed_package() {
 #set +x
 }
 
-# 安装软件包，使用debian 的发行名，自动转换成其他系统下的名字。
-# 如果是 gawk 或 syslinux 则判断处理
-install_package () {
+## @fn install_package()
+## @brief install software packages
+## @param name the package names
+##
+## using the package name of Debian, and convert to the name of the underlying distribution.
+## the package gawk or syslinux will be handled in a different way
+install_package() {
     local PARAM_NAME=$*
     local INSTALLER=`ospkgget $OSTYPE apt-get`
 
@@ -830,7 +909,9 @@ install_package_skip_installed() {
     done
 }
 
-install_arch_yaourt () {
+## @fn install_arch_yaourt()
+## @brief install yaourt for Arch Linux
+install_arch_yaourt() {
     wget https://aur.archlinux.org/packages/ya/yaourt/yaourt.tar.gz
 
     pacman -Qi package-query >> /dev/null
@@ -850,11 +931,14 @@ install_arch_yaourt () {
         && cd ..
 }
 
-install_package_alt () {
-    PARAM_NAME=$*
-    INSTALLER=`ospkgget $OSTYPE apt-get`
+## @fn install_package_alt()
+## @brief install alternative packages
+## @param name the package names
+install_package_alt() {
+    local PARAM_NAME=$*
+    local INSTALLER=`ospkgget $OSTYPE apt-get`
 
-    INST_OPTS=""
+    local INST_OPTS=""
     case "$OSTYPE" in
     Debian)
         INST_OPTS="install -y --force-yes"
@@ -895,19 +979,21 @@ install_package_alt () {
     echo "ok"
 }
 
-
-# check if command is not exist, then install the package
-check_install_package () {
-    PARAM_BIN=$1
+## @fn check_install_package()
+## @brief check if command is not exist, then install the package
+## @param bin the binary name
+## @param pkg the package name
+check_install_package() {
+    local PARAM_BIN=$1
     shift
-    PARAM_PKG=$1
+    local PARAM_PKG=$1
     shift
     if [ ! -x "${PARAM_BIN}" ]; then
         install_package "${PARAM_PKG}"
     fi
 }
 
-detect_os_type
+detect_os_type 1>&2
 
 #for h in ${!hash*}; do indirect=$hash$h; echo ${!indirect}; done
 #hiter hash
@@ -951,21 +1037,23 @@ if [ ! -x "${EXEC_AWK}" ]; then
     exit 1
 fi
 
-############################################################
+######################################################################
 # ssh
 
-# ensure the success of the connection
-# 确保本地 id_rsa.pub 复制到远程机器
-ssh_ensure_connection () {
-    PARAM_SSHURL="${1}"
-
-    # generate the cert of localhost
+## @fn ssh_check_id_file()
+## @brief generate the cert of localhost
+ssh_check_id_file() {
     if [ ! -f ~/.ssh/id_rsa.pub ]; then
         mr_trace "[DBG] generate id ..."
         mkdir -p ~/.ssh/
         ssh-keygen
     fi
+}
 
+## @fn ssh_ensure_connection()
+## @brief ensure the local id_rsa.pub copied to remote host to setup the SSH connection without key
+ssh_ensure_connection() {
+    local PARAM_SSHURL="${1}"
     mr_trace "[DBG] test host: ${PARAM_SSHURL}"
     $EXEC_SSH "${PARAM_SSHURL}" "ls > /dev/null"
     if [ ! "$?" = "0" ]; then
@@ -979,22 +1067,28 @@ ssh_ensure_connection () {
     fi
 }
 
-############################################################
+######################################################################
 # Math Lib:
 
 # 最大公约数 (Greatest Common Divisor, GCD)
 # 最小公倍数 (Least Common Multiple, LCM)
-# example:
-# gdc 6 15
-# 30
-gcd () {
-    PARAM_NUM1=$1
+
+## @fn gcd()
+## @brief Greatest Common Divisor, GCD
+## @param num1 number 1
+## @param num2 number 2
+##
+## example:
+## gcd 6 15
+## 30
+gcd() {
+    local PARAM_NUM1=$1
     shift
-    PARAM_NUM2=$1
+    local PARAM_NUM2=$1
     shift
 
-    NUM1=$PARAM_NUM1
-    NUM2=$PARAM_NUM2
+    local NUM1=$PARAM_NUM1
+    local NUM2=$PARAM_NUM2
     if [ $(echo | awk -v A=$NUM1 -v B=$NUM2 '{ if (A<B) {print 1;} else {print 0;} }') = 1 ]; then
         NUM1=$PARAM_NUM2
         NUM2=$PARAM_NUM1
@@ -1012,14 +1106,14 @@ gcd () {
     echo $(($NUM1 * $NUM2 / $a))
 }
 
-############################################################
+######################################################################
 # IPv4 address Lib:
 die() {
     mr_trace "Error: $@"
     exit 1
 }
 
-IPv4_check_ok () {
+IPv4_check_ok() {
     local IFS=.
     set -- $1
     [ $# -eq 4 ] || return 2
@@ -1030,7 +1124,7 @@ IPv4_check_ok () {
     echo $(( ($1<<24) + ($2<<16) + ($3<<8) + $4))
 }
 
-IPv4_from_int () {
+IPv4_from_int() {
     echo $(($1>>24)).$(($1>>16&255)).$(($1>>8&255)).$(($1&255))
 }
 
@@ -1044,8 +1138,8 @@ IPv4_from_int () {
 #echo "first ip=${OUTPUT_IPV4_FIRSTIP}"
 #echo "DHCP_UNKNOW=${OUTPUT_IPV4_DHCP_UNKNOW_RANGE}"
 #echo "DHCP_KNOW=${OUTPUT_IPV4_DHCP_KNOW_RANGE}"
-IPv4_convert () {
-    PARAM_IP="$1"
+IPv4_convert() {
+    local PARAM_IP="$1"
     shift
 
     netIP=$(echo $PARAM_IP | awk -F/ '{print $1}')
@@ -1072,28 +1166,28 @@ IPv4_convert () {
     OUTPUT_IPV4_FIRSTIP=$(  IPv4_from_int $((  intBASE + 1  ))  )
 
     RESERV_RATIO="4/5"
-    #echo "LEN = $LEN"
-    #echo "RESERV_RATIO = $RESERV_RATIO"
+    #mr_trace "LEN = $LEN"
+    #mr_trace "RESERV_RATIO = $RESERV_RATIO"
     SZ=$((  ( 1 << ( 32 - $LEN ) ) - 2  ))
-    #echo "SZ-0 = $SZ"
+    #mr_trace "SZ-0 = $SZ"
     SZ2=$((  ( $SZ - $SZ * $RESERV_RATIO ) * 3 / 4  ))
-    #echo "SZ2-0 = $SZ2"
+    #mr_trace "SZ2-0 = $SZ2"
     [ $SZ2 -lt 100 ] || SZ2=100
-    #echo "SZ2-1 = $SZ2"
+    #mr_trace "SZ2-1 = $SZ2"
     [ $SZ2 -gt 0 ] || SZ2=1
-    #echo "SZ2-2 = $SZ2"
+    #mr_trace "SZ2-2 = $SZ2"
     SZ1=$((  ( $SZ - $SZ * $RESERV_RATIO ) - $SZ2  ))
-    #echo "SZ1-0 = $SZ1"
+    #mr_trace "SZ1-0 = $SZ1"
     [ $SZ1 -lt 10 ] || SZ1=10
-    #echo "SZ1-1 = $SZ1"
+    #mr_trace "SZ1-1 = $SZ1"
     [ $SZ1 -gt 0 ] || SZ1=1
-    #echo "SZ1-2 = $SZ1"
+    #mr_trace "SZ1-2 = $SZ1"
     SZLEFT=$((  $SZ - $SZ1 - $SZ2  ))
-    #echo "SZLEFT-0 = $SZLEFT"
+    #mr_trace "SZLEFT-0 = $SZLEFT"
     [ $SZLEFT -gt 0 ] || SZLEFT=$((  ( $SZ / 3 + $SZ ) * $RESERV_RATIO  ))
-    #echo "SZLEFT-1 = $SZLEFT"
+    #mr_trace "SZLEFT-1 = $SZLEFT"
     [ $SZLEFT -gt 0 ] || SZLEFT=1
-    #echo "SZLEFT-2 = $SZLEFT"
+    #mr_trace "SZLEFT-2 = $SZLEFT"
     SZ1=$((  ( $SZ - $SZLEFT ) / 2  ))
     [ $SZ1 -lt 10 ] || SZ1=10
     [ $SZ1 -gt 0 ] || SZ1=0
@@ -1101,9 +1195,9 @@ IPv4_convert () {
     [ $SZ2 -lt 100 ] || SZ2=100
     [ $SZ2 -gt 0 ] || SZ2=0
     SZLEFT=$((  $SZ - $SZ1 - $SZ2  ))
-    #echo SZ1=$SZ1
-    #echo SZ2=$SZ2
-    #echo SZLEFT=$SZLEFT
+    #mr_trace SZ1=$SZ1
+    #mr_trace SZ2=$SZ2
+    #mr_trace SZLEFT=$SZLEFT
 
     MID=$((  $intBCST - $SZ2 - 1 ))
     [ $MID -lt $intBCST ] || MID=$((  $intBCST - 1  ))
@@ -1159,16 +1253,26 @@ daemonize_job() {
 
 #####################################################################
 HDFF_EXCLUDE_4PREFIX="\.\,?\!\-_:;\]\[\#\|\$()\"%"
-generate_prefix_from_filename () {
-  PARAM_FN="$1"
+
+## @fn generate_prefix_from_filename()
+## @brief generate a prefix string from a file name
+## @param fn the file name
+##
+generate_prefix_from_filename() {
+  local PARAM_FN="$1"
   shift
 
   echo "${PARAM_FN//[${HDFF_EXCLUDE_4PREFIX}]/}" | tr [:upper:] [:lower:]
 }
 
 HDFF_EXCLUDE_4FILENAME="\""
-unquote_filename () {
-  PARAM_FN="$1"
+
+## @fn unquote_filename()
+## @brief remove double quotes from string
+## @param fn the file name
+##
+unquote_filename() {
+  local PARAM_FN="$1"
   shift
   #mr_trace "PARAM_FN=${PARAM_FN}; dirname=$(dirname "${PARAM_FN}"); readlink2=$(readlink -f "$(dirname "${PARAM_FN}")" )"
   echo "${PARAM_FN//[${HDFF_EXCLUDE_4FILENAME}]/}" | sed 's/\t//g'
