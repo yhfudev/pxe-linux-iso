@@ -771,7 +771,7 @@ tftp_init_service () {
 
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${HTTPD_ROOT}"
     $DO_EXEC cd "${SYSTEM_TOP}/${HTTPD_ROOT}"
-    $DO_EXEC ln -sf "${TFTP_ROOT}" "tftproot"
+    $DO_EXEC ln -sf "${TFTP_ROOT}" "tftpboot"
     $DO_EXEC cd -
 
     # set the header of configuration file
@@ -1654,7 +1654,7 @@ EOF
             TFTP_APPEND_NFS="archisobasedir=arch "
             case "${SVR_PROTO}" in
             "http")
-                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftproot/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
                 ;;
             *)
                 mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
@@ -1679,7 +1679,7 @@ EOF
             #misolabel=MJRO0812 nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 logo.nologo overlay=free quiet splash showopts ip=dhcp
             case "${SVR_PROTO}" in
             "http")
-                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_http_srv=http://${DIST_NFSIP}/tftproot/${DIST_MOUNTPOINT}"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}"
                 ;;
             *)
                 mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
@@ -1708,7 +1708,7 @@ EOF
             TFTP_APPEND_NFS="archisobasedir=blackarch ip=:::::eth0:dhcp"
             case "${SVR_PROTO}" in
             "http")
-                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftproot/${DIST_MOUNTPOINT}"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}"
                 ;;
             *)
                 mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"

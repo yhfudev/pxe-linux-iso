@@ -45,7 +45,7 @@ Prerequisites
 
   * Installed NFS server. This script will append lines to file /etc/exports;
   * Installed TFTP server. This script will append lines to file
-     /var/lib/tftpboot/netboot/pxelinux.cfg/default;
+     /var/lib/tftpboot/pxelinux.cfg/default;
   * To mount ISO files as loop device, a line will also be appended to /etc/fstab;
   * Installed syslinux;
   * To support HTTP installation, you may need to get the HTTP server installed and
@@ -68,16 +68,12 @@ Initialize directories
       |-- images-desktop     # mount points for Linux desktop distributions
       |-- images-server      # mount points for Linux server distributions
       |-- images-net         # mount points for netinstall
-      |-- netboot            # (tftp default directory)
-          |-- downloads      # symbol link
-          |-- images-desktop # symbol link
-          |-- images-server  # symbol link
-          |-- images-net     # symbol link
+      |-- kickstarts         # kickstart scripts
 
   The following files also be initialized with default headers:
 
-      /var/lib/tftpboot/netboot/pxelinux.cfg/default
-      /var/lib/tftpboot/netboot/pxelinux.cfg/boot.txt
+      /var/lib/tftpboot/pxelinux.cfg/default
+      /var/lib/tftpboot/pxelinux.cfg/boot.txt
 
 Examples
 --------
