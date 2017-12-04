@@ -615,6 +615,7 @@ download_extract_2tmp_syslinux () {
         $DO_EXEC cp "${DN_SRC}/bios/com32/menu/menu.c32"                "${DN_INSTALLED_SYSLINUX}"
         $DO_EXEC cp "${DN_SRC}/bios/com32/mboot/mboot.c32"              "${DN_INSTALLED_SYSLINUX}"
         $DO_EXEC cp "${DN_SRC}/bios/com32/chain/chain.c32"              "${DN_INSTALLED_SYSLINUX}"
+
     else
         mr_trace "[ERR] not found file ${FN_SYSLI}"
     fi

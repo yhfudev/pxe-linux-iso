@@ -750,6 +750,8 @@ tftp_init_service () {
     if [ -f "${SYSLINUX_ROOT}/pxelinux.0" ]; then
         $DO_EXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/"
         $DO_EXEC cp "${SYSLINUX_ROOT}/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/ldlinux.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+        $DO_EXEC cp "${SYSLINUX_ROOT}/libutil.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
     else
         $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/"
         $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
@@ -1828,7 +1830,7 @@ EOF
         cat << EOF >> "${FN_TMP_TFTPMENU}"
 LABEL ${TFTP_TAG_LABEL}
     MENU LABEL ${TFTP_MENU_LABEL}
-    ${TFTP_KERNEL} nouveau.modeset=0 i915.modeset=1 radeon.modeset=1 i915.preliminary_hw_support=1
+    ${TFTP_KERNEL} nomodeset nouveau.modeset=0 i915.modeset=1 radeon.modeset=1 i915.preliminary_hw_support=1
     ${TFTP_APPEND}
 EOF
     else
