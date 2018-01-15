@@ -948,7 +948,7 @@ tftp_setup_pxe_iso () {
         mr_trace "[ERR]   please specify by --disttype option!"
     fi
 
-    export ISO_NAME=$(basename ${DIST_URL})
+    export ISO_NAME=$(basename "${DIST_URL}")
     if [ "${FLG_QUIT}" = "1" ]; then
         DIST_NAME="${ISO_NAME}"
         DIST_NAME_TYPE=""
@@ -1126,12 +1126,12 @@ tftp_setup_pxe_iso () {
 
             if [ ! -f "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux" ]; then
                 for i in $(find "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "*linu*" ) ; do
-                    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename $i)"
+                    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename "${i}")"
                 done
             fi
             if [ ! -f "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz" ]; then
                 for i in $(find "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "initrd*" ) ; do
-                    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename $i)"
+                    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename "${i}")"
                 done
             fi
 
@@ -1145,7 +1145,7 @@ tftp_setup_pxe_iso () {
 #URL_INITRD="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/initrd3.8.019wtnonpa-20130429091312-e20cgo6obhlyk3fi-1/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.lz"
 
 #cp "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/i386/initrd.gz" cd-initrd.gz
-#cp "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})" url-initrd.lz
+#cp "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_INITRD}")" url-initrd.lz
 
 #mkdir cd
 #cd cd
@@ -1168,8 +1168,8 @@ tftp_setup_pxe_iso () {
 
                 URL_INITRD="http://${DIST_NFSIP}/initrd-3.8.0-19-wt-non-pae_3.8.0-19.29_i386.gz"
                 URL_VMLINUZ="http://bazaar.launchpad.net/~webtom/+junk/linux-image-i386-non-pae/download/head:/vmlinuz3.8.019wtnonp-20130429091312-e20cgo6obhlyk3fi-5/vmlinuz-3.8.0-19-wt-non-pae_3.8.0-19.29_i386"
-                TFTP_KERNEL="KERNEL downloads/$(basename ${URL_VMLINUZ})"
-                TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
+                TFTP_KERNEL="KERNEL downloads/$(basename "${URL_VMLINUZ}")"
+                TFTP_APPEND_INITRD="initrd=downloads/$(basename "${URL_INITRD}")"
             fi
             ;;
 
@@ -1226,32 +1226,32 @@ tftp_setup_pxe_iso () {
                 #$DO_EXEC down_url "${URL_PKG1}"
                 #$DO_EXEC down_url "${URL_PKG2}"
                 #$DO_EXEC down_url "${URL_PKG3}"
-                $DO_EXEC wget --no-check-certificate -c "${URL_INITRD}"  -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_INITRD})"
-                $DO_EXEC wget --no-check-certificate -c "${URL_VMLINUZ}" -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_VMLINUZ})"
-                $DO_EXEC wget --no-check-certificate -c "${URL_PKG1}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_PKG1})"
-                $DO_EXEC wget --no-check-certificate -c "${URL_PKG2}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_PKG2})"
-                $DO_EXEC wget --no-check-certificate -c "${URL_PKG3}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename ${URL_PKG3})"
+                $DO_EXEC wget --no-check-certificate -c "${URL_INITRD}"  -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_INITRD}")"
+                $DO_EXEC wget --no-check-certificate -c "${URL_VMLINUZ}" -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_VMLINUZ}")"
+                $DO_EXEC wget --no-check-certificate -c "${URL_PKG1}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG1}")"
+                $DO_EXEC wget --no-check-certificate -c "${URL_PKG2}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG2}")"
+                $DO_EXEC wget --no-check-certificate -c "${URL_PKG3}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG3}")"
 
-                TFTP_APPEND_INITRD="initrd=downloads/$(basename ${URL_INITRD})"
+                TFTP_APPEND_INITRD="initrd=downloads/$(basename "${URL_INITRD}")"
                 #TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
-                TFTP_KERNEL="KERNEL downloads/$(basename ${URL_VMLINUZ})"
+                TFTP_KERNEL="KERNEL downloads/$(basename "${URL_VMLINUZ}")"
                 TFTP_MENU_LABEL="${TFTP_MENU_LABEL} non-PAE"
                 TFTP_TAG_LABEL="${TFTP_TAG_LABEL}_nonpae"
                 # kickstart:
                 FN_KS="ks-${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-nonpae.ks"
                 cat << EOF > "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/${FN_KS}"
 %post
-#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG1})"
-#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG2})"
-#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename ${URL_PKG3})"
+#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG1}")"
+#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG2}")"
+#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG3}")"
 
 wget --no-check-certificate "${URL_PKG1}"
 wget --no-check-certificate "${URL_PKG2}"
 wget --no-check-certificate "${URL_PKG3}"
 
-dpkg --root=/target -i $(basename ${URL_PKG1})
-dpkg --root=/target -i $(basename ${URL_PKG2})
-dpkg --root=/target -i $(basename ${URL_PKG3})
+dpkg --root=/target -i $(basename "${URL_PKG1}")
+dpkg --root=/target -i $(basename "${URL_PKG2}")
+dpkg --root=/target -i $(basename "${URL_PKG3}")
 %end
 EOF
                 TFTP_APPEND_OTHER="ks=http://${DIST_NFSIP}/kickstarts/${FN_KS} ${TFTP_APPEND_OTHER}"
@@ -1260,9 +1260,9 @@ EOF
                 echo "    wget '${URL_PKG1}'" >> "${FN_TMP_LASTMSG}"
                 echo "    wget '${URL_PKG2}'" >> "${FN_TMP_LASTMSG}"
                 echo "    wget '${URL_PKG3}'" >> "${FN_TMP_LASTMSG}"
-                echo "    dpkg --root=/target -i $(basename ${URL_PKG1})" >> "${FN_TMP_LASTMSG}"
-                echo "    dpkg --root=/target -i $(basename ${URL_PKG2})" >> "${FN_TMP_LASTMSG}"
-                echo "    dpkg --root=/target -i $(basename ${URL_PKG3})" >> "${FN_TMP_LASTMSG}"
+                echo "    dpkg --root=/target -i $(basename "${URL_PKG1}")" >> "${FN_TMP_LASTMSG}"
+                echo "    dpkg --root=/target -i $(basename "${URL_PKG2}")" >> "${FN_TMP_LASTMSG}"
+                echo "    dpkg --root=/target -i $(basename "${URL_PKG3}")" >> "${FN_TMP_LASTMSG}"
                 FLG_NON_PAE_PROCESSED=1
 
               fi

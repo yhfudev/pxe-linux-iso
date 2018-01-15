@@ -74,7 +74,7 @@ fi
 ##
 ## pass a message to log file, and also to stdout
 mr_trace() {
-    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename $0)] $@" | tee -a ${FN_LOG} 1>&2
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
 }
 
 ## @fn mr_exec_do()
@@ -596,7 +596,7 @@ download_extract_2tmp_syslinux () {
     $DO_EXEC mkdir -p "${DN_TMP}"
     $DO_EXEC cd "${DN_TMP}"
     URL_REAL="https://www.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.tar.gz"
-    FN_SYSLI=$(basename ${URL_REAL})
+    FN_SYSLI=$(basename "${URL_REAL}")
 
     $DO_EXEC wget --no-check-certificate "${URL_REAL}"
 
@@ -633,7 +633,7 @@ download_extract_2tmp_syslinux_from_arch () {
     $DO_EXEC rm -f index.html*
     URL_ORIG="https://www.archlinux.org/packages/core/i686/syslinux/download/"
     URL_REAL=$(wget --no-check-certificate ${URL_ORIG} 2>&1 | grep pkg | grep $DATE1 | awk '{print $3}')
-    FN_SYSLI=$(basename ${URL_REAL})
+    FN_SYSLI=$(basename "${URL_REAL}")
     if [ ! -f "${FN_SYSLI}" ]; then
         if [ ! -f index.html ]; then
             mr_trace "[ERR] not found downloaded file from ${URL_ORIG}(${URL_REAL})"
