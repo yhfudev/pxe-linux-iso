@@ -270,6 +270,18 @@ BEGIN {
             case "mageia":
                 dist_name = "mageia";
                 break;
+            # VMware
+            case "vmware":
+                dist_name = "vmware";
+                break;
+            case "vmvisor":
+                dist_type = "vmvisor";
+                dist_arch = "x86_64";
+                break;
+            case "5969303.x86_64":
+                dist_arch = "x86_64";
+                break;
+
             case "x86_64":
                 dist_arch = "x86_64";
                 break;
@@ -288,8 +300,11 @@ BEGIN {
             case "i686":
                 dist_arch = "i686";
                 break;
-            case "livecd":
             case "live":
+                if (match(dist_name, /ubuntu/)) {
+                    break;
+                }
+            case "livecd":
             case "dvd":  # opensuse, mageia
                 flg_live = 1;
                 break;
@@ -369,8 +384,11 @@ BEGIN {
                 } else if (match(lstr, /64bit/)) {
                     dist_arch = "amd64";
                     flg_ignore=0
-                } else if (match(lstr, /i386/)) {
-                    dist_arch = "i386";
+                } else if (match(lstr, /64bit/)) {
+                    dist_arch = "amd64";
+                    flg_ignore=0
+                } else if (match(lstr, /x86_64/)) {
+                    dist_arch = "x86_64";
                     flg_ignore=0
                 } else if (match(lstr, /32bit/)) {
                     dist_arch = "i386";
@@ -463,7 +481,7 @@ END {
     print "DECLNXOUT_RELEASE="   dist_release    >> FN_OUTPUT
     print "DECLNXOUT_ARCH="      dist_arch       >> FN_OUTPUT
     print "DECLNXOUT_TYPE="      dist_type       >> FN_OUTPUT
-    print "DECLNXOUT_UI="        dist_ui          >> FN_OUTPUT
+    print "DECLNXOUT_UI="        dist_ui         >> FN_OUTPUT
     print "DECLNXOUT_FLG_LIVE="  flg_live        >> FN_OUTPUT
     print "DECLNXOUT_FLG_NFS="   flg_nfs         >> FN_OUTPUT
 }
@@ -1482,6 +1500,7 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz"
             ;;
+
         "net")
             FLG_MOUNT=0
             # following are ignored
@@ -1499,13 +1518,33 @@ EOF
             B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
             TFTP_APPEND_INITRD="initrd=${B}"
             ;;
+
         "desktop"|"live")
             FLG_NFS=1
-            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/isolinux/initrd0.img"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
-            TFTP_APPEND_NFS="boot=casper"
-                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            # automaticly check the name of the 'vmlinuz'
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+            B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
+            TFTP_APPEND_INITRD="initrd=${B}"
+
+            case "${SVR_PROTO}" in
+            "http")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/LiveOS/squashfs.img ksdevice=bootif repo=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/"
+                ;;
+            "tftp")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img ksdevice=bootif repo=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/"
+                ;;
+            *)
+                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+            #    ;;
+            #"nfs")
+                TFTP_APPEND_NFS="boot=casper"
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} ip=dhcp root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} rw selinux=0"
+                ;;
+            esac
+
             ;;
         *)
             mr_trace "[ERR] Not supported centos type: ${DIST_TYPE}"
@@ -1658,6 +1697,9 @@ EOF
             "http")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
                 ;;
+            "tftp")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_tftp_srv=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
+                ;;
             *)
                 mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
             #    ;;
@@ -1682,6 +1724,9 @@ EOF
             case "${SVR_PROTO}" in
             "http")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}"
+                ;;
+            "tftp")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_tftp_srv=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}"
                 ;;
             *)
                 mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
@@ -1711,6 +1756,9 @@ EOF
             case "${SVR_PROTO}" in
             "http")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_http_srv=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}"
+                ;;
+            "tftp")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_tftp_srv=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}"
                 ;;
             *)
                 mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
@@ -1817,6 +1865,28 @@ EOF
         TFTP_KERNEL="KERNEL downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-vmlinuz"
         TFTP_APPEND_INITRD="initrd=downloads/${DIST_NAME}-${DIST_ARCH}-${DIST_RELEASE}-initrd.gz"
         ;;
+
+    "vmware")
+        FLG_NFS=1
+        mr_trace "[DBG] dist vmware"
+        case "$DIST_TYPE" in
+        "vmvisor")
+            FLG_NFS=0
+            #TFTP_APPEND_HTTP="prefix=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/"
+            #TFTP_APPEND_NFS="BOOT=casper boot=casper nopersistent rw quite vga=0x317 "
+            #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+            TFTP_APPEND_INITRD="-c ${DIST_MOUNTPOINT}/boot.cfg"
+            #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
+            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/mboot.c32"
+            ;;
+
+        *)
+            mr_trace "[ERR] Not supported vmware type: ${DIST_TYPE}"
+            exit 0
+            ;;
+        esac
+        ;;
+
 
     *)
         mr_trace "[ERR] Not supported distribution: ${DIST_NAME}"
