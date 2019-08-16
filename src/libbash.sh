@@ -468,6 +468,7 @@ ospkgset dhcp3-server       dhcp                dhcp                dnsmasq
 ospkgset dhcp3-client       dhcp                dhcpcd              dnsmasq
 ospkgset tftpd-hpa          tftp-server         tftp-hpa            dnsmasq
 ospkgset syslinux           syslinux            syslinux            syslinux
+ospkgset pxelinux           syslinux            syslinux            syslinux
 ospkgset nfs-kernel-server  nfs-utils           nfs-utils           nfs-kernel-server
 ospkgset nfs-common         nfs-utils           nfs-utils           nfs-utils
 ospkgset bind9              bind                bind                bind-server

@@ -14,6 +14,10 @@
 #  1) low case the file name, otherwise the tftp server won't work
 #  2) update http://vercot.com/%7Eserva/an/NonWindowsPXE3.html
 
+#  3) NFS test: nfsmount -o nolock -o ro 192.168.3.56:/media/tftpboot/images-server/ubuntu/18.04.1/amd64 /mnt
+#     bug: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1755863
+
+
 #DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
 DN_EXEC="$(dirname $(readlink -f "$0"))"
 if [ ! "${DN_EXEC}" = "" ]; then
@@ -580,24 +584,24 @@ check_xxxsum () {
     fi
     MD5SUM_REMOTE=
     rm -f "${FN_TMP_PREFIX}md5tmp"
-    wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "${FN_TMP_PREFIX}md5tmp"
+    wget --tries=3 --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME} -O "${FN_TMP_PREFIX}md5tmp"
     if [ ! "$?" = "0" ]; then
         rm -f "${FN_TMP_PREFIX}md5tmp"
         FN_BASE1=$(echo "${PARAM_SUMNAME}" | tr '[A-Z]' '[a-z]')
-        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "${FN_TMP_PREFIX}md5tmp"
+        wget --tries=3 --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "${FN_TMP_PREFIX}md5tmp"
         if [ ! "$?" = "0" ]; then
             rm -f "${FN_TMP_PREFIX}md5tmp"
         fi
     fi
     if [ ! -f "${FN_TMP_PREFIX}md5tmp" ]; then
         FN_BASE1=$(basename "${FN_SINGLE}" | ${EXEC_AWK} -F. '{b=$1; for (i=2; i < NF; i ++) {b=b "." $(i)}; print b}')
-        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "${FN_TMP_PREFIX}md5tmp"
+        wget --tries=3 --no-check-certificate $(dirname "${PARAM_URL0}")/${FN_BASE1}.txt -O "${FN_TMP_PREFIX}md5tmp"
         if [ ! "$?" = "0" ]; then
             rm -f "${FN_TMP_PREFIX}md5tmp"
         fi
     fi
     if [ ! -f "${FN_TMP_PREFIX}md5tmp" ]; then
-        wget --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME}.md5.txt -O "${FN_TMP_PREFIX}md5tmp"
+        wget --tries=3 --no-check-certificate $(dirname "${PARAM_URL0}")/${PARAM_SUMNAME}.md5.txt -O "${FN_TMP_PREFIX}md5tmp"
         if [ ! "$?" = "0" ]; then
             rm -f "${FN_TMP_PREFIX}md5tmp"
         fi
@@ -703,7 +707,7 @@ down_url () {
         mr_trace "[DBG] " download_file "${DN_SRCS}" "${MD5SUM_DW}" "${FN_SINGLE}" "${PARAM_URL0}"
         RET=0
         $DO_EXEC rm -f "${DN_SRCS}/${FN_SINGLE}"
-        $DO_EXEC wget --no-check-certificate -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
+        $DO_EXEC wget --tries=3 --no-check-certificate -c "${PARAM_URL0}" -O "${DN_SRCS}/${FN_SINGLE}"
         RET=$?
         if [ ${RET} = 0 ]; then
             mr_trace "[INFO] md5sum ... ${FN_SINGLE}"
@@ -744,17 +748,18 @@ tftp_init_service () {
     fi
 
     if [ ! -d "${SYSLINUX_ROOT}" ]; then
+        mr_trace "[WARNING] Not found syslinux, try to install one"
+        install_package syslinux pxelinux
+    fi
+
+    if [ ! -d "${SYSLINUX_ROOT}" ]; then
         export SYSLINUX_ROOT=/usr/share/syslinux/
     fi
     if [ ! -d "${SYSLINUX_ROOT}" ]; then
-        export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/efi32/
+        export SYSLINUX_ROOT=/tmp/usr/lib/syslinux/
     fi
     if [ ! -d "${SYSLINUX_ROOT}" ]; then
         export SYSLINUX_ROOT="${DN_INSTALLED_SYSLINUX}"
-    fi
-    if [ ! -d "${SYSLINUX_ROOT}" ]; then
-        mr_trace "[WARNING] Not found syslinux, try to install one"
-        install_package syslinux
     fi
     if [ ! -d "${SYSLINUX_ROOT}" ]; then
         mr_trace "[DBG] Error in searching syslinux folder: ${SYSLINUX_ROOT}"
@@ -765,21 +770,52 @@ tftp_init_service () {
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/pxelinux.cfg/"
 
     $DO_EXEC alias cp=cp
-    if [ -f "${SYSLINUX_ROOT}/pxelinux.0" ]; then
-        $DO_EXEC cp "${SYSLINUX_ROOT}/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/ldlinux.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/libutil.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
-    else
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/pxelinux.0" "${SYSTEM_TOP}/${TFTP_ROOT}/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/memdisk"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/ldlinux.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
-        $DO_EXEC cp "${SYSLINUX_ROOT}/../bios/libutil.c32" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+
+    local FN_PXELINUX=$(find "${SYSLINUX_ROOT}" -name pxelinux.0 | sort | head -n 1)
+    if [ ! -f "${FN_PXELINUX}" ]; then
+        FN_PXELINUX=$(find "/usr/lib/PXELINUX/" -name pxelinux.0 | sort | head -n 1)
     fi
-    $DO_EXEC cp "${SYSLINUX_ROOT}/menu.c32"   "${SYSTEM_TOP}/${TFTP_ROOT}/"
-    $DO_EXEC cp "${SYSLINUX_ROOT}/mboot.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/"
-    $DO_EXEC cp "${SYSLINUX_ROOT}/chain.c32"  "${SYSTEM_TOP}/${TFTP_ROOT}/"
-    $DO_EXEC cp "${SYSLINUX_ROOT}/pxechain.com" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    if [ -f "${FN_PXELINUX}" ]; then
+        $DO_EXEC cp "${FN_PXELINUX}" "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_MEMDISK=$(find "${SYSLINUX_ROOT}" -name memdisk | sort | head -n 1)
+    if [ -f "${FN_MEMDISK}" ]; then
+        $DO_EXEC cp "${FN_MEMDISK}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_LDLINUX=$(find "${SYSLINUX_ROOT}" -name ldlinux.c32 | sort | head -n 1)
+    if [ -f "${FN_LDLINUX}" ]; then
+        $DO_EXEC cp "${FN_LDLINUX}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_LIBUTIL=$(find "${SYSLINUX_ROOT}" -name libutil.c32 | sort | head -n 1)
+    if [ -f "${FN_LIBUTIL}" ]; then
+        $DO_EXEC cp "${FN_LIBUTIL}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_MENU=$(find "${SYSLINUX_ROOT}" -name menu.c32 | sort | head -n 1)
+    if [ -f "${FN_MENU}" ]; then
+        $DO_EXEC cp "${FN_MENU}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_MBOOT=$(find "${SYSLINUX_ROOT}" -name mboot.c32 | sort | head -n 1)
+    if [ -f "${FN_MBOOT}" ]; then
+        $DO_EXEC cp "${FN_MBOOT}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_CHAIN=$(find "${SYSLINUX_ROOT}" -name chain.c32 | sort | head -n 1)
+    if [ -f "${FN_CHAIN}" ]; then
+        $DO_EXEC cp "${FN_CHAIN}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
+
+    local FN_PXECHAIN=$(find "${SYSLINUX_ROOT}" -name pxechain.com | sort | head -n 1)
+    if [ ! -f "${FN_PXECHAIN}" ]; then
+        FN_PXECHAIN=$(find "${SYSLINUX_ROOT}" -name pxechn.c32 | sort | head -n 1)
+    fi
+    if [ -f "${FN_PXECHAIN}" ]; then
+        $DO_EXEC cp "${FN_PXECHAIN}"    "${SYSTEM_TOP}/${TFTP_ROOT}/"
+    fi
 
     # 然后构建文件链接：(注意链接要使用相对链接文件所在目录的路径!)
     $DO_EXEC mkdir -p "${SYSTEM_TOP}/${TFTP_ROOT}/images-server/"
@@ -879,7 +915,11 @@ detect_vmlinu_initrd () {
     $DO_EXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $DO_EXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $DO_EXEC cd "${PARAM_TFTP_ROOT}"
+    echo "current dir: `pwd`"
     A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" "${PARAM_SEARCH_DIRS}" )
+    if [ ! -f "${A}" ]; then
+      A=$(detect_file "${PARAM_MNTPNT}" "linu" "${PARAM_SEARCH_DIRS}" )
+    fi
     TFTP_KERNEL="${A}"
     #mr_trace "[INFO] KERNEL:${TFTP_KERNEL}"
     A=$(detect_file "${PARAM_MNTPNT}" "initrd" "${PARAM_SEARCH_DIRS}" )
@@ -1138,23 +1178,39 @@ tftp_setup_pxe_iso () {
         "server") # server, alternate
             mr_trace "[DBG] type server"
             FLG_NFS=0
-            TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz"
-            TFTP_APPEND_NFS=""
-            TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux"
 
-            if [ ! -f "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/linux" ]; then
-                for i in $(find "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "*linu*" ) ; do
-                    TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename "${i}")"
-                done
-            fi
-            if [ ! -f "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/initrd.gz" ]; then
-                for i in $(find "${SYSTEM_TOP}/${TFTP_ROOT}/${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/" -name "initrd*" ) ; do
-                    TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/install/netboot/ubuntu-installer/${DIST_ARCH}/$(basename "${i}")"
-                done
-            fi
+            # automaticly check the name of the 'vmlinuz'
+            mr_trace "Ubuntu Server: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/"
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/")
+            mr_trace "Ubuntu Server: detect_vmlinu_initrd() return: $A"
+            B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
+            TFTP_KERNEL="KERNEL ${B}"
+            B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
+            TFTP_APPEND_INITRD="initrd=${B}"
 
-            # for 12 or later
-                TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/install/filesystem.squashfs"
+            TFTP_APPEND_INITRD="${TFTP_APPEND_INITRD} systemd.mask=dev-hugepages.mount systemd.mask=dev-mqueue.mount systemd.mask=sys-fs-fuse-connections.mount systemd.mask=sys-kernel-config.mount systemd.mask=sys-kernel-debug.mount systemd.mask=tmp.mount"
+
+            TFTP_APPEND_NFS="showmounts toram boot=casper ip=dhcp ro ipv6.disable=1"
+            case "${SVR_PROTO}" in
+            "http")
+                #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/casper/filesystem.squashfs ksdevice=bootif repo=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/"
+                # for 12 and above
+                TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/casper/filesystem.squashfs"
+                ;;
+            "tftp")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/casper/filesystem.squashfs ksdevice=bootif repo=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/"
+                ;;
+            *)
+                FLG_NFS=1
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+                #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/cifs netboot=cifs nfsroot=//${DIST_NFSIP}/${DIST_MOUNTPOINT} NFSOPTS=-ouser=user,pass=mypass,sec=ntlm,vers=1.0,ro "
+                ;;
+            esac
+
+
+            mr_trace "Ubuntu Server: TFTP_KERNEL: $TFTP_KERNEL"
+            mr_trace "Ubuntu Server: TFTP_APPEND_INITRD: $TFTP_APPEND_INITRD"
+
 
             if [ "${FLG_NON_PAE}" = "1" ]; then
 
@@ -1191,17 +1247,16 @@ tftp_setup_pxe_iso () {
             fi
             ;;
 
-        "desktop")
-            # desktop, live?
-            FLG_NFS=1
+        "desktop"|"live")
+            # desktop, live
+            FLG_NFS=0
             TFTP_APPEND_INITRD="initrd=${DIST_MOUNTPOINT}/casper/initrd.lz"
-                TFTP_APPEND_NFS="root=/dev/nfs boot=casper netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
             # automaticly check the name of the 'vmlinuz'
-            mr_trace "Ubuntu Desktop: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}"
-            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
+            mr_trace "Ubuntu Desktop: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/"
+            A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/")
             mr_trace "Ubuntu Desktop: detect_vmlinu_initrd() return: $A"
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -1209,6 +1264,23 @@ tftp_setup_pxe_iso () {
             B=$(echo ${A} | ${EXEC_AWK} '{print $2}' )
             TFTP_APPEND_INITRD="initrd=${B}"
             #DEBUG: if [ ! "${TFTP_APPEND_INITRD}" = "initrd=images-desktop/ubuntu/17.04/amd64/casper/initrd.lz" ]; then mr_trace "[TEST] un-expected initrd!"; exit 2; fi
+
+
+            TFTP_APPEND_NFS="showmounts toram boot=casper ip=dhcp ro ipv6.disable=1"
+            case "${SVR_PROTO}" in
+            "http")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/casper/filesystem.squashfs ksdevice=bootif repo=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/"
+                ;;
+            "tftp")
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/casper/filesystem.squashfs ksdevice=bootif repo=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/"
+                ;;
+            *)
+                FLG_NFS=1
+                TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/nfs netboot=nfs nfsroot=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
+                #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=/dev/cifs netboot=cifs nfsroot=//${DIST_NFSIP}/${DIST_MOUNTPOINT} NFSOPTS=-ouser=user,pass=mypass,sec=ntlm,vers=1.0,ro "
+                ;;
+            esac
+
 
             mr_trace "Ubuntu Desktop: TFTP_KERNEL: $TFTP_KERNEL"
             mr_trace "Ubuntu Desktop: TFTP_APPEND_INITRD: $TFTP_APPEND_INITRD"
@@ -1244,11 +1316,11 @@ tftp_setup_pxe_iso () {
                 #$DO_EXEC down_url "${URL_PKG1}"
                 #$DO_EXEC down_url "${URL_PKG2}"
                 #$DO_EXEC down_url "${URL_PKG3}"
-                $DO_EXEC wget --no-check-certificate -c "${URL_INITRD}"  -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_INITRD}")"
-                $DO_EXEC wget --no-check-certificate -c "${URL_VMLINUZ}" -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_VMLINUZ}")"
-                $DO_EXEC wget --no-check-certificate -c "${URL_PKG1}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG1}")"
-                $DO_EXEC wget --no-check-certificate -c "${URL_PKG2}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG2}")"
-                $DO_EXEC wget --no-check-certificate -c "${URL_PKG3}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG3}")"
+                $DO_EXEC wget --tries=3 --no-check-certificate -c "${URL_INITRD}"  -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_INITRD}")"
+                $DO_EXEC wget --tries=3 --no-check-certificate -c "${URL_VMLINUZ}" -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_VMLINUZ}")"
+                $DO_EXEC wget --tries=3 --no-check-certificate -c "${URL_PKG1}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG1}")"
+                $DO_EXEC wget --tries=3 --no-check-certificate -c "${URL_PKG2}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG2}")"
+                $DO_EXEC wget --tries=3 --no-check-certificate -c "${URL_PKG3}"    -O "${SYSTEM_TOP}/${TFTP_ROOT}/downloads/$(basename "${URL_PKG3}")"
 
                 TFTP_APPEND_INITRD="initrd=downloads/$(basename "${URL_INITRD}")"
                 #TFTP_APPEND_OTHER="nosplash ${TFTP_APPEND_OTHER}"
@@ -1259,13 +1331,13 @@ tftp_setup_pxe_iso () {
                 FN_KS="ks-${DIST_NAME}-${DIST_RELEASE}-${DIST_ARCH}-${DIST_TYPE}-nonpae.ks"
                 cat << EOF > "${SYSTEM_TOP}/${TFTP_ROOT}/kickstarts/${FN_KS}"
 %post
-#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG1}")"
-#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG2}")"
-#wget --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG3}")"
+#wget --tries=3 --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG1}")"
+#wget --tries=3 --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG2}")"
+#wget --tries=3 --no-check-certificate "http://${DIST_NFSIP}/downloads/$(basename "${URL_PKG3}")"
 
-wget --no-check-certificate "${URL_PKG1}"
-wget --no-check-certificate "${URL_PKG2}"
-wget --no-check-certificate "${URL_PKG3}"
+wget --tries=3 --no-check-certificate "${URL_PKG1}"
+wget --tries=3 --no-check-certificate "${URL_PKG2}"
+wget --tries=3 --no-check-certificate "${URL_PKG3}"
 
 dpkg --root=/target -i $(basename "${URL_PKG1}")
 dpkg --root=/target -i $(basename "${URL_PKG2}")
@@ -1275,9 +1347,9 @@ EOF
                 TFTP_APPEND_OTHER="ks=http://${DIST_NFSIP}/kickstarts/${FN_KS} ${TFTP_APPEND_OTHER}"
                 echo "You may want to install non-PAE Linux kernel before the system reboots:" >> "${FN_TMP_LASTMSG}"
                 echo "  (press ALT+CTRL+F1 to switch to the console)" >> "${FN_TMP_LASTMSG}"
-                echo "    wget '${URL_PKG1}'" >> "${FN_TMP_LASTMSG}"
-                echo "    wget '${URL_PKG2}'" >> "${FN_TMP_LASTMSG}"
-                echo "    wget '${URL_PKG3}'" >> "${FN_TMP_LASTMSG}"
+                echo "    wget --tries=3 '${URL_PKG1}'" >> "${FN_TMP_LASTMSG}"
+                echo "    wget --tries=3 '${URL_PKG2}'" >> "${FN_TMP_LASTMSG}"
+                echo "    wget --tries=3 '${URL_PKG3}'" >> "${FN_TMP_LASTMSG}"
                 echo "    dpkg --root=/target -i $(basename "${URL_PKG1}")" >> "${FN_TMP_LASTMSG}"
                 echo "    dpkg --root=/target -i $(basename "${URL_PKG2}")" >> "${FN_TMP_LASTMSG}"
                 echo "    dpkg --root=/target -i $(basename "${URL_PKG3}")" >> "${FN_TMP_LASTMSG}"
@@ -1842,7 +1914,7 @@ EOF
 
     "puppy")
         # http://vercot.com/~serva/an/NonWindowsPXE3.html
-        #$DO_EXEC wget -c http://vercot.com/~serva/download/INITRD_N01.GZ -O ${TFTP_ROOT}/downloads/puppy-initrd_n01.gz
+        #$DO_EXEC wget --tries=3 -c http://vercot.com/~serva/download/INITRD_N01.GZ -O ${TFTP_ROOT}/downloads/puppy-initrd_n01.gz
         #cat << EOF > "${FN_TMP_TFTPMENU}"
 #LABEL ${TFTP_TAG_LABEL}_iso
     #MENU LABEL ${TFTP_MENU_LABEL}
