@@ -915,7 +915,7 @@ detect_vmlinu_initrd () {
     $DO_EXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $DO_EXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $DO_EXEC cd "${PARAM_TFTP_ROOT}"
-    echo "current dir: `pwd`"
+    mr_trace "current dir: `pwd`"
     A=$(detect_file "${PARAM_MNTPNT}" "vmlinu" "${PARAM_SEARCH_DIRS}" )
     if [ ! -f "${A}" ]; then
       A=$(detect_file "${PARAM_MNTPNT}" "linu" "${PARAM_SEARCH_DIRS}" )
@@ -1195,7 +1195,7 @@ tftp_setup_pxe_iso () {
             "http")
                 #TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/casper/filesystem.squashfs ksdevice=bootif repo=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/"
                 # for 12 and above
-                TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/${DIST_MOUNTPOINT}/casper/filesystem.squashfs"
+                TFTP_APPEND_NFS="mirror/country=manual mirror/http/hostname=${DIST_NFSIP} mirror/http/directory=/tftpboot/${DIST_MOUNTPOINT} live-installer/net-image=http://${DIST_NFSIP}/tftpboot/${DIST_MOUNTPOINT}/casper/filesystem.squashfs"
                 ;;
             "tftp")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/casper/filesystem.squashfs ksdevice=bootif repo=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/"
@@ -1994,8 +1994,10 @@ EOF
             echo "    option fstype 'iso9660'"      >> "${FN_TMP_OPENWRTFSTAB}"
             echo "    option device '${DIST_FILE}'" >> "${FN_TMP_OPENWRTFSTAB}"
             echo "    option target '${TFTP_ROOT}/${DIST_MOUNTPOINT}'" >> "${FN_TMP_OPENWRTFSTAB}"
+            echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
+        else
+            echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
         fi
-        echo "${DIST_FILE} ${TFTP_ROOT}/${DIST_MOUNTPOINT} udf,iso9660 auto,user,loop,utf8 0 0" > "${FN_TMP_ETCFSTAB}"
     fi
     if [ "${FLG_NFS}" = "1" ]; then
         echo "${TFTP_ROOT}/${DIST_MOUNTPOINT} *(ro,sync,no_wdelay,insecure_locks,no_subtree_check,no_root_squash,insecure)" > "${FN_TMP_ETCEXPORTS}"
