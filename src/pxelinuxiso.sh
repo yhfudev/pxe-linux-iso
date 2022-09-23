@@ -82,8 +82,8 @@ BEGIN {
     FN_OUTPUT=FNOUT
     if ("" == FN_OUTPUT) {
         FN_OUTPUT="guess-linux-dist-output-url"
-        print "[DBG] Waring: use the default output file name: " FN_OUTPUT;
-        print "[DBG]         please specify the output file name via 'awk -v FNOUT=outfile'";
+        print "[DBG] Warning: use the default output file name: " FN_OUTPUT;
+        print "[DBG]          please specify the output file name via 'awk -v FNOUT=outfile'";
     }
     flg_live=0;
     flg_nfs=0;
@@ -911,7 +911,7 @@ detect_vmlinu_initrd () {
     PARAM_SEARCH_DIRS="$1"
     shift
 
-    # automaticly check the name of the 'vmlinuz'
+    # automatically check the name of the 'vmlinuz'
     $DO_EXEC mkdir -p "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $DO_EXEC mount -o loop,utf8 "${PARAM_DIST_FILE}" "${PARAM_TFTP_ROOT}/${PARAM_MNTPNT}"
     $DO_EXEC cd "${PARAM_TFTP_ROOT}"
@@ -1144,7 +1144,7 @@ tftp_setup_pxe_iso () {
         #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
         TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/live/vmlinuz"
 
-        # automaticly check the name of the 'vmlinuz'
+        # automatically check the name of the 'vmlinuz'
         A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
         B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
         TFTP_KERNEL="KERNEL ${B}"
@@ -1179,7 +1179,7 @@ tftp_setup_pxe_iso () {
             mr_trace "[DBG] type server"
             FLG_NFS=0
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             mr_trace "Ubuntu Server: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/"
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/")
             mr_trace "Ubuntu Server: detect_vmlinu_initrd() return: $A"
@@ -1254,7 +1254,7 @@ tftp_setup_pxe_iso () {
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             mr_trace "Ubuntu Desktop: " detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/"
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS} install/netboot/ubuntu-installer/${DIST_ARCH}/")
             mr_trace "Ubuntu Desktop: detect_vmlinu_initrd() return: $A"
@@ -1384,7 +1384,7 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/casper/vmlinuz"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             #B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             #TFTP_KERNEL="KERNEL ${B}"
@@ -1404,7 +1404,7 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/${ITYPE}/vmlinuz"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -1548,7 +1548,7 @@ EOF
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/isolinux/vmlinuz0"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -1583,7 +1583,7 @@ EOF
             TFTP_APPEND_NFS=""
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -1594,7 +1594,7 @@ EOF
         "desktop"|"live")
             FLG_NFS=1
             #TFTP_APPEND_OTHER=" ${TFTP_APPEND_OTHER}"
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -1609,7 +1609,7 @@ EOF
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} root=live:tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/LiveOS/squashfs.img ksdevice=bootif repo=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}/"
                 ;;
             *)
-                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+                mr_trace "[ERR] unsupported file server protocol: ${SVR_PROTO}"
             #    ;;
             #"nfs")
                 TFTP_APPEND_NFS="boot=casper"
@@ -1773,7 +1773,7 @@ EOF
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_tftp_srv=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
                 ;;
             *)
-                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+                mr_trace "[ERR] unsupported file server protocol: ${SVR_PROTO}"
             #    ;;
             #"nfs")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT} ip=:::::eth0:dhcp -"
@@ -1781,7 +1781,7 @@ EOF
             esac
 
             #TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/arch/boot/${ITYPE}/vmlinuz"
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "arch/boot ${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -1801,7 +1801,7 @@ EOF
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_tftp_srv=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}"
                 ;;
             *)
-                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+                mr_trace "[ERR] unsupported file server protocol: ${SVR_PROTO}"
             #    ;;
             #"nfs")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} miso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
@@ -1812,7 +1812,7 @@ EOF
             TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/boot/vmlinuz-${ITYPE}"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             #A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "${DIST_NAME}/boot ${DEFAULT_BOOTIMG_DIRS}")
             #B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             #TFTP_KERNEL="KERNEL ${B}"
@@ -1833,7 +1833,7 @@ EOF
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_tftp_srv=tftp://${DIST_NFSIP}/${DIST_MOUNTPOINT}"
                 ;;
             *)
-                mr_trace "[ERR] unsupport file server protocol: ${SVR_PROTO}"
+                mr_trace "[ERR] unsupported file server protocol: ${SVR_PROTO}"
             #    ;;
             #"nfs")
                 TFTP_APPEND_NFS="${TFTP_APPEND_NFS} archiso_nfs_srv=${DIST_NFSIP}:${TFTP_ROOT}/${DIST_MOUNTPOINT}"
@@ -1842,7 +1842,7 @@ EOF
             TFTP_APPEND_OTHER="arch=${DIST_ARCH}"
             TFTP_KERNEL="KERNEL ${DIST_MOUNTPOINT}/blackarch/boot/${ITYPE}/vmlinuz"
 
-            # automaticly check the name of the 'vmlinuz'
+            # automatically check the name of the 'vmlinuz'
             A=$(detect_vmlinu_initrd "${DIST_MOUNTPOINT}" "${DIST_FILE}" "${SYSTEM_TOP}/${TFTP_ROOT}" "blackarch/boot ${DEFAULT_BOOTIMG_DIRS}")
             B=$(echo ${A} | ${EXEC_AWK} '{print $1}' )
             TFTP_KERNEL="KERNEL ${B}"
@@ -2201,7 +2201,7 @@ usage () {
     echo "  --distrelease <NAME> set the distribution release, such as quantal,raring" ${OUT_TO_STDERR}
     echo "  --disttype <NAME> set the type of ISO, such as net, server, desktop." ${OUT_TO_STDERR}
 
-    echo "  --nointeractive|-n  no interative" ${OUT_TO_STDERR}
+    echo "  --nointeractive|-n  not interactive" ${OUT_TO_STDERR}
     echo "  --simulate|-s       not do the real work, just show the info" ${OUT_TO_STDERR}
     echo "" ${OUT_TO_STDERR}
     echo "Features" ${OUT_TO_STDERR}
@@ -2500,7 +2500,7 @@ mr_trace "and restart your DHCP server!"
 cat "${FN_TMP_LASTMSG}" | while read a; do mr_trace $a; done
 if [ "${FLG_NON_PAE}" = "1" ]; then
     if [ "${FLG_NON_PAE_PROCESSED}" = "0" ]; then
-        mr_trace "[ERR] Not porcess non-PAE option!"
+        mr_trace "[ERR] Not process non-PAE option!"
     fi
 fi
 

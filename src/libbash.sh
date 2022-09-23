@@ -33,7 +33,7 @@ fi
 PRIuSZ="%019d"
 
 #####################################################################
-# becareful the danger execution, such as rm -rf ...
+# be careful the danger execution, such as rm -rf ...
 # use DANGER_EXEC=echo to skip all of such executions.
 DANGER_EXEC="echo [DryRunDanger]"
 
@@ -47,7 +47,7 @@ fi
 # the temporary directory
 DN_TMP=/tmp/
 # check the temporary directory size
-LIST_DN=$(df | grep -v "1K-blocks" | gawk '{prefix=$6; sz=$2; if (sz<100000) {unvalid[prefix]=1;} else {unvalid[prefix]=0;} }END{for (prefix in unvalid){if ("/" == substr(prefix,length(prefix),1)) dir=prefix "tmp"; else dir=prefix "/tmp"; if ((unvalid[prefix]!="1") && (unvalid[dir]!="1")) print dir; } }')
+LIST_DN=$(df | grep -v "1K-blocks" | gawk '{prefix=$6; sz=$2; if (sz<100000) {invalid[prefix]=1;} else {invalid[prefix]=0;} }END{for (prefix in invalid){if ("/" == substr(prefix,length(prefix),1)) dir=prefix "tmp"; else dir=prefix "/tmp"; if ((invalid[prefix]!="1") && (invalid[dir]!="1")) print dir; } }')
 for DN_TMP in $LIST_DN; do
   mkdir -p "${DN_TMP}"
   touch "${DN_TMP}/temptest"
@@ -507,7 +507,7 @@ ospkgset php5-common        php                 php-apache          php7
 #ospkgset php5-cli           php                 php                 php7-cli
 #ospkgset php5-mcrypt        ""                  ""                  php7-mod-mcrypt
 #ospkgset php5-mysql         php-mysql           ""                  php7-mod-mysqli
-#ospkgset php5-pgsql         ""                  ""                  
+#ospkgset php5-pgsql         ""                  ""
 ospkgset php5-sqlite        php-sqlite          php-sqlite          php7-mod-sqlite3
 #ospkgset php5-dev           ""                  ""                  ""
 #ospkgset php5-curl          ""                  ""                  ""
@@ -1145,13 +1145,13 @@ IPv4_convert() {
     shift
 
     netIP=$(echo $PARAM_IP | awk -F/ '{print $1}')
-    intIP=$(IPv4_check_ok $netIP) || die "Submited IP: '$netIP' is not an IPv4 address."
+    intIP=$(IPv4_check_ok $netIP) || die "Submitted IP: '$netIP' is not an IPv4 address."
 
     LEN=$(echo $PARAM_IP | awk -F/ '{print $2}')
     intMASK0=$((  ( (1<<$LEN) - 1 ) << ( 32 - $LEN )  ))
     #echo "intMASK0=$intMASK0"
     netMASK=$(  IPv4_from_int $intMASK0  )
-    intMASK=$(IPv4_check_ok $netMASK) || die "Submited Mask: '$netMASK' not IPv4."
+    intMASK=$(IPv4_check_ok $netMASK) || die "Submitted Mask: '$netMASK' not IPv4."
     if [ ! "$intMASK0" = "$intMASK" ]; then
         die "Mask convert error: 0-'$intMASK0'; 1-'$intMASK'"
     fi
